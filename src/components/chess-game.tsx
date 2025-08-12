@@ -81,6 +81,7 @@ export default function ChessGame() {
       }
     } catch (error) {
       console.error("AI move failed:", error);
+      // Fallback to a random move if AI fails
       const moves = game.moves();
       const move = moves[Math.floor(Math.random() * moves.length)];
       game.move(move);
@@ -100,31 +101,42 @@ export default function ChessGame() {
 
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || game.turn() !== playerColor || isAiThinking) return;
-    
-    const gameCopy = new Chess(game.fen());
-    const moveResult = gameCopy.move({ from, to, promotion: 'q' });
 
+    // Check if the move is valid before proceeding
+    const moveResult = game.move({ from, to, promotion: 'q' });
+
+    // If the move is invalid, revert the game state and do nothing
     if (!moveResult) {
       console.log("Invalid move");
       return;
     }
-      
+
+    // Since the move was valid, undo it temporarily. 
+    // We will re-apply it after handling the evolution prompt.
+    game.undo();
+    
+    // Now, handle the logic for capture and evolution
     if (moveResult.captured) {
-      playCaptureSound();
       const evolvingPiece = moveResult.piece;
       if (getEvolution(evolvingPiece)) {
+        // A piece was captured and it can evolve. Show the dialog.
+        playCaptureSound();
         setEvolutionPrompt({ from, to, piece: evolvingPiece, captured: moveResult.captured });
-        // Don't apply move to main game object yet, wait for user's evolution choice
+        // We return here and wait for the user's choice in the dialog.
+        // The move will be finalized in handleEvolution.
         return;
       }
-    } else {
-      playMoveSound();
     }
       
-    // If no evolution, apply the move directly
-    const move = game.move({ from, to, promotion: 'q' });
-    if (move) {
-        setLastMove({ from: move.from, to: move.to });
+    // If there's no capture or no possible evolution, just make the move.
+    const finalMove = game.move({ from, to, promotion: 'q' });
+    if (finalMove) {
+        if (!finalMove.captured) {
+          playMoveSound();
+        } else {
+          playCaptureSound();
+        }
+        setLastMove({ from: finalMove.from, to: finalMove.to });
         setBoard(game.board());
     }
   };
@@ -134,6 +146,7 @@ export default function ChessGame() {
     
     const { from, to, piece } = evolutionPrompt;
     
+    // The move is made here, ensuring it's part of the main game state.
     const move = game.move({ from, to, promotion: 'q' });
     
     if (move) {
@@ -142,7 +155,8 @@ export default function ChessGame() {
       if (evolve) {
         const newPieceType = getEvolution(piece);
         if (newPieceType) {
-          const color = game.get(to)?.color;
+          // The color is determined from the piece that just moved.
+          const color = move.color;
           if (color) {
             game.put({ type: newPieceType, color }, to);
             playEvolveSound();
@@ -153,6 +167,7 @@ export default function ChessGame() {
       }
     }
     
+    // Update the board with the final state, whether evolved or not.
     setBoard(game.board());
     setEvolutionPrompt(null);
   };
@@ -172,6 +187,7 @@ export default function ChessGame() {
     const history = game.history({verbose: true});
     const captured = [];
     for (const move of history) {
+      // Find captures made BY the specified color's opponent
       if(move.captured && move.color !== color) {
         captured.push(move.captured);
       }
@@ -228,11 +244,11 @@ export default function ChessGame() {
                 <CardTitle className="text-xl font-headline flex items-center gap-2"><Swords /> Captured Pieces</CardTitle>
             </CardHeader>
             <CardContent>
-                <h3 className="font-bold text-muted-foreground mb-2">White's Captures</h3>
+                <h3 className="font-bold text-muted-foreground mb-2">White's Captures (Black pieces)</h3>
                  <div className="flex flex-wrap gap-1 min-h-[30px]">
                     {capturedPieces('w').map((p, i) => <span key={i} className='text-xl'>{pieceToUnicode(p, 'b')}</span>)}
                 </div>
-                <h3 className="font-bold text-muted-foreground mt-4 mb-2">Black's Captures</h3>
+                <h3 className="font-bold text-muted-foreground mt-4 mb-2">Black's Captures (White pieces)</h3>
                  <div className="flex flex-wrap gap-1 min-h-[30px]">
                     {capturedPieces('b').map((p, i) => <span key={i} className='text-xl'>{pieceToUnicode(p, 'w')}</span>)}
                 </div>
@@ -273,3 +289,4 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
 
+    
