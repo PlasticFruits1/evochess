@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { type Move } from '@/lib/types';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
-type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color: Color };
+type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color: Color, captured: PieceSymbol | undefined };
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
   const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
@@ -73,7 +73,6 @@ export default function ChessGame() {
       const fen = game.fen();
       const response = await generateChessMove({ boardState: fen, difficulty });
       
-      // The AI can sometimes generate an invalid move. We'll try to use it, but have a fallback.
       const gameCopy = new Chess(fen);
       const move = gameCopy.move(response.move);
 
@@ -86,22 +85,9 @@ export default function ChessGame() {
         }
         setGame(new Chess(gameCopy.fen()));
       } else {
-        // This case handles when chess.js returns null for an invalid move format.
-        console.error("AI generated an invalid move:", response.move);
-        toast({
-            title: "AI Error",
-            description: `The AI tried an invalid move (${response.move}). A random move was played instead.`,
-            variant: "destructive"
-        });
-        const moves = game.moves();
-        const randomMove = moves[Math.floor(Math.random() * moves.length)];
-        const newGame = new Chess(game.fen());
-        newGame.move(randomMove);
-        setLastMove(null); // Can't show last move if it's random
-        setGame(new Chess(newGame.fen()));
+         throw new Error(`Invalid move format: ${response.move}`);
       }
     } catch (error) {
-      // This case handles when chess.js throws an error for a syntactically correct but illegal move.
       console.error("AI move failed, falling back to random move:", error);
       toast({
         title: "AI Error",
@@ -131,35 +117,41 @@ export default function ChessGame() {
 
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || game.turn() !== playerColor || isAiThinking || evolutionPrompt) return;
-
+  
     const gameCopy = new Chess(game.fen());
-    // Use promotion: 'q' as a default for pawns reaching the end.
     const moveResult = gameCopy.move({ from, to, promotion: 'q' });
-
+  
     if (!moveResult) {
-      // This case handles invalid moves from the player.
       toast({
-          title: "Invalid Move",
-          description: "That move is not allowed.",
-          variant: "destructive"
+        title: "Invalid Move",
+        description: "That move is not allowed.",
+        variant: "destructive"
       });
       return;
     }
-    
-    setLastMove({ from, to });
+  
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
-    
-    // Always update the game state with the move first.
-    setGame(new Chess(gameCopy.fen()));
-    
+  
+    setLastMove({ from, to });
+  
     if (wasCapture && canEvolve) {
       playCaptureSound();
-      setEvolutionPrompt({ from, to, piece: moveResult.piece, color: moveResult.color });
-    } else if (wasCapture) {
-      playCaptureSound();
+      setEvolutionPrompt({ 
+        from, 
+        to, 
+        piece: moveResult.piece, 
+        color: moveResult.color, 
+        captured: moveResult.captured 
+      });
+      setGame(new Chess(gameCopy.fen()));
     } else {
-      playMoveSound();
+      if (wasCapture) {
+        playCaptureSound();
+      } else {
+        playMoveSound();
+      }
+      setGame(new Chess(gameCopy.fen()));
     }
   };
   
@@ -171,7 +163,6 @@ export default function ChessGame() {
       const newPieceType = getEvolution(piece);
       
       if (newPieceType) {
-        // We work with the *current* game state, which already includes the move.
         const newGame = new Chess(game.fen()); 
         newGame.put({ type: newPieceType, color: color }, to);
         playEvolveSound();
