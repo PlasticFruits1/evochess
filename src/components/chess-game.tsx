@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
@@ -15,7 +16,7 @@ import { Loader } from '@/components/ui/loader';
 import { Crown, Swords } from 'lucide-react';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
-type EvolutionMove = { from: Square; to: Square; piece: PieceSymbol, captured: PieceSymbol };
+type EvolutionMove = { from: Square; to: Square; piece: PieceSymbol, captured: PieceSymbol | undefined };
 type LastMove = { from: Square; to: Square; };
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
@@ -98,33 +99,33 @@ export default function ChessGame() {
 
 
   const handleMove = (from: Square, to: Square) => {
-    if (isGameOver || game.turn() !== playerColor) return;
+    if (isGameOver || game.turn() !== playerColor || isAiThinking) return;
     
-    let moveResult = null;
-    try {
-      const gameCopy = new Chess(game.fen());
-      moveResult = gameCopy.move({ from, to, promotion: 'q' });
-      if (!moveResult) return;
-      
-      setLastMove({ from, to });
-      
-      if (moveResult.captured) {
-        playCaptureSound();
-        const evolvingPiece = moveResult.piece;
-        if (getEvolution(evolvingPiece)) {
-          setEvolutionPrompt({ from, to, piece: evolvingPiece, captured: moveResult.captured });
-          return;
-        }
-      } else {
-        playMoveSound();
-      }
-      
-      game.move({ from, to, promotion: 'q' });
-      setBoard(game.board());
+    const gameCopy = new Chess(game.fen());
+    const moveResult = gameCopy.move({ from, to, promotion: 'q' });
 
-    } catch (e) {
-      console.log("Invalid move", e);
+    if (!moveResult) {
+      console.log("Invalid move");
       return;
+    }
+      
+    if (moveResult.captured) {
+      playCaptureSound();
+      const evolvingPiece = moveResult.piece;
+      if (getEvolution(evolvingPiece)) {
+        setEvolutionPrompt({ from, to, piece: evolvingPiece, captured: moveResult.captured });
+        // Don't apply move to main game object yet, wait for user's evolution choice
+        return;
+      }
+    } else {
+      playMoveSound();
+    }
+      
+    // If no evolution, apply the move directly
+    const move = game.move({ from, to, promotion: 'q' });
+    if (move) {
+        setLastMove({ from: move.from, to: move.to });
+        setBoard(game.board());
     }
   };
   
@@ -133,17 +134,21 @@ export default function ChessGame() {
     
     const { from, to, piece } = evolutionPrompt;
     
-    game.move({ from, to, promotion: 'q' });
+    const move = game.move({ from, to, promotion: 'q' });
     
-    if (evolve) {
-      const newPieceType = getEvolution(piece);
-      if (newPieceType) {
-        const color = game.get(to)?.color;
-        if (color) {
-          game.put({ type: newPieceType, color }, to);
-          playEvolveSound();
-          setShiningPiece(to);
-          setTimeout(() => setShiningPiece(null), 2000);
+    if (move) {
+      setLastMove({ from: move.from, to: move.to });
+    
+      if (evolve) {
+        const newPieceType = getEvolution(piece);
+        if (newPieceType) {
+          const color = game.get(to)?.color;
+          if (color) {
+            game.put({ type: newPieceType, color }, to);
+            playEvolveSound();
+            setShiningPiece(to);
+            setTimeout(() => setShiningPiece(null), 2000);
+          }
         }
       }
     }
@@ -267,3 +272,4 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
