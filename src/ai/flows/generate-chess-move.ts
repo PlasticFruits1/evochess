@@ -49,7 +49,9 @@ And the difficulty level: {{difficulty}}
 
 Suggest the best chess move in UCI notation and briefly explain your reasoning.
 
-The move must be in UCI format. For example: e2e4, g1f3, e7e8q (for promotion).
+IMPORTANT: If you are in check, you MUST make a move to get out of check.
+
+The move must be a legal move and in UCI format. For example: e2e4, g1f3, e7e8q (for promotion).
 
 Output format: 
 {
@@ -70,5 +72,3 @@ const generateChessMoveFlow = ai.defineFlow(
     return output!;
   }
 );
-
-    

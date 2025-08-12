@@ -29,7 +29,6 @@ const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
   const [game, setGame] = useState(new Chess());
-  const [board, setBoard] = useState(game.board());
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [playerColor] = useState<Color>('w');
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -40,8 +39,7 @@ export default function ChessGame() {
   const { toast } = useToast();
   
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
-  // Generate all possible moves for the current turn
-  const validMoves = useMemo(() => game.moves({ verbose: true }), [game, board]);
+  const validMoves = useMemo(() => game.moves({ verbose: true }), [game]);
 
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -64,16 +62,17 @@ export default function ChessGame() {
 
   useEffect(() => {
     updateStatus();
-  }, [board, updateStatus]);
+  }, [game, updateStatus]);
 
   const triggerAiMove = useCallback(async () => {
     if (isGameOver || game.turn() === playerColor) return;
 
     setIsAiThinking(true);
+    const newGame = new Chess(game.fen());
     try {
-      const fen = game.fen();
+      const fen = newGame.fen();
       const response = await generateChessMove({ boardState: fen, difficulty });
-      const move = game.move(response.move);
+      const move = newGame.move(response.move);
 
       if (move) {
         setLastMove({ from: move.from, to: move.to });
@@ -83,16 +82,15 @@ export default function ChessGame() {
             playMoveSound();
         }
       } else {
-        // AI made an invalid move, fallback to a random one
         console.error("AI generated an invalid move:", response.move);
         toast({
             title: "AI Error",
             description: `The AI tried an invalid move (${response.move}). A random move was played instead.`,
             variant: "destructive"
         })
-        const moves = game.moves();
+        const moves = newGame.moves();
         const randomMove = moves[Math.floor(Math.random() * moves.length)];
-        game.move(randomMove);
+        newGame.move(randomMove);
       }
     } catch (error) {
       console.error("AI move failed, falling back to random move:", error);
@@ -101,15 +99,13 @@ export default function ChessGame() {
         description: `An error occurred while generating the AI move. A random move was played instead.`,
         variant: "destructive"
       })
-      // Fallback to a random move if AI fails
-      const moves = game.moves();
+      const moves = newGame.moves();
       if (moves.length > 0) {
         const move = moves[Math.floor(Math.random() * moves.length)];
-        game.move(move);
+        newGame.move(move);
       }
     }
-    
-    setBoard(game.board());
+    setGame(newGame);
     setIsAiThinking(false);
   }, [game, difficulty, playerColor, isGameOver, toast]);
 
@@ -118,24 +114,20 @@ export default function ChessGame() {
       const timer = setTimeout(triggerAiMove, 500);
       return () => clearTimeout(timer);
     }
-  }, [game, playerColor, isGameOver, triggerAiMove, board]);
+  }, [game, playerColor, isGameOver, triggerAiMove]);
 
 
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || game.turn() !== playerColor || isAiThinking) return;
 
-    // The chess.js `move` method is smart enough to handle promotions.
-    // We default to 'q' (Queen) for simplicity.
-    const moveAttempt = { from, to, promotion: 'q' };
-    const moveResult = game.move(moveAttempt);
+    const newGame = new Chess(game.fen());
+    const moveResult = newGame.move({ from, to, promotion: 'q' });
 
-    // If move is illegal, chess.js returns null.
     if (!moveResult) {
       return;
     }
 
     setLastMove({ from, to });
-    setBoard(game.board());
 
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
@@ -143,53 +135,47 @@ export default function ChessGame() {
     if (wasCapture) {
       playCaptureSound();
       if (canEvolve) {
-        // We temporarily undo the move to show the dialog.
-        // The game state will be correctly restored in handleEvolution.
-        game.undo();
         setEvolutionPrompt({
           from,
           to,
           piece: moveResult.piece,
           captured: moveResult.captured,
         });
+        // We set the game state here so the board updates, but the evolution dialog will control the next step.
+        setGame(newGame);
         return;
       }
     } else {
       playMoveSound();
     }
-    // No evolution, so we trigger the AI move if it's their turn.
-    updateStatus();
+    setGame(newGame);
   };
   
   const handleEvolution = (evolve: boolean) => {
     if (!evolutionPrompt) return;
     
-    const { from, to, piece } = evolutionPrompt;
+    const { to, piece } = evolutionPrompt;
     
-    // Re-apply the original move.
-    game.move({ from, to, promotion: 'q' });
-    
+    // The move is already made, we just might need to evolve the piece
+    const newGame = new Chess(game.fen());
+
     if (evolve) {
       const newPieceType = getEvolution(piece);
       if (newPieceType) {
-        const color = game.get(to)?.color as Color;
-        game.put({ type: newPieceType, color }, to);
+        const color = newGame.get(to)?.color as Color;
+        newGame.put({ type: newPieceType, color }, to);
         playEvolveSound();
         setShiningPiece(to);
         setTimeout(() => setShiningPiece(null), 2000);
       }
     }
     
-    // Finalize board state and reset prompt
-    setBoard(game.board());
+    setGame(newGame);
     setEvolutionPrompt(null);
-    updateStatus();
   };
   
   const handleNewGame = () => {
-    const newGame = new Chess();
-    setGame(newGame);
-    setBoard(newGame.board());
+    setGame(new Chess());
     setStatus("New game started. White's turn.");
     setLastMove(null);
     setEvolutionPrompt(null);
@@ -212,7 +198,7 @@ export default function ChessGame() {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-7xl mx-auto p-4">
       <div className="lg:col-span-2">
         <ChessBoard
-          board={board}
+          board={game.board()}
           onMove={handleMove}
           turn={game.turn()}
           lastMove={lastMove}
