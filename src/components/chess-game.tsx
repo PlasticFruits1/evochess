@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
-import type { PieceSymbol, Square, Color } from 'chess.js';
+import type { PieceSymbol, Square, Color, Move } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
 
@@ -39,6 +39,7 @@ export default function ChessGame() {
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
+  const validMoves = useMemo(() => game.moves({ verbose: true }), [game]);
 
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -71,6 +72,7 @@ export default function ChessGame() {
       const fen = game.fen();
       const response = await generateChessMove({ boardState: fen, difficulty });
       const move = game.move(response.move, { sloppy: true });
+
       if (move) {
         setLastMove({ from: move.from, to: move.to });
         if (move.captured) {
@@ -78,9 +80,15 @@ export default function ChessGame() {
         } else {
             playMoveSound();
         }
+      } else {
+        // AI made an invalid move, fallback to a random one
+        console.error("AI generated an invalid move:", response.move);
+        const moves = game.moves();
+        const randomMove = moves[Math.floor(Math.random() * moves.length)];
+        game.move(randomMove);
       }
     } catch (error) {
-      console.error("AI move failed:", error);
+      console.error("AI move failed, falling back to random move:", error);
       // Fallback to a random move if AI fails
       const moves = game.moves();
       const move = moves[Math.floor(Math.random() * moves.length)];
@@ -105,14 +113,13 @@ export default function ChessGame() {
     // Check if the move is valid before proceeding
     const moveResult = game.move({ from, to, promotion: 'q' });
 
-    // If the move is invalid, revert the game state and do nothing
+    // If the move is invalid, do nothing
     if (!moveResult) {
-      console.log("Invalid move");
+      console.log("Invalid move attempted by player:", { from, to });
       return;
     }
 
-    // Since the move was valid, undo it temporarily. 
-    // We will re-apply it after handling the evolution prompt.
+    // Undo the move to check for evolution logic
     game.undo();
     
     // Now, handle the logic for capture and evolution
@@ -155,19 +162,15 @@ export default function ChessGame() {
       if (evolve) {
         const newPieceType = getEvolution(piece);
         if (newPieceType) {
-          // The color is determined from the piece that just moved.
           const color = move.color;
-          if (color) {
-            game.put({ type: newPieceType, color }, to);
-            playEvolveSound();
-            setShiningPiece(to);
-            setTimeout(() => setShiningPiece(null), 2000);
-          }
+          game.put({ type: newPieceType, color }, to);
+          playEvolveSound();
+          setShiningPiece(to);
+          setTimeout(() => setShiningPiece(null), 2000);
         }
       }
     }
     
-    // Update the board with the final state, whether evolved or not.
     setBoard(game.board());
     setEvolutionPrompt(null);
   };
@@ -187,7 +190,6 @@ export default function ChessGame() {
     const history = game.history({verbose: true});
     const captured = [];
     for (const move of history) {
-      // Find captures made BY the specified color's opponent
       if(move.captured && move.color !== color) {
         captured.push(move.captured);
       }
@@ -204,7 +206,7 @@ export default function ChessGame() {
           turn={game.turn()}
           lastMove={lastMove}
           shiningPiece={shiningPiece}
-          validMoves={game.moves({ verbose: true })}
+          validMoves={validMoves}
         />
       </div>
 
@@ -288,5 +290,3 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
-
-    
