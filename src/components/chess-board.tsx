@@ -22,16 +22,21 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
     const piece = getPieceAtSquare(square);
 
     if (fromSquare) {
+      // Check if the move is valid by searching the validMoves array
       const isMoveValid = validMoves.some(m => m.from === fromSquare && m.to === square);
+      
       if (isMoveValid) {
         onMove(fromSquare, square);
         setFromSquare(null);
       } else if (piece && piece.color === turn) {
+        // If the user clicks on another of their pieces, select it
         setFromSquare(square);
       } else {
+        // If the user clicks an empty square or an opponent's piece (not a valid move), deselect
         setFromSquare(null);
       }
     } else if (piece && piece.color === turn) {
+      // If no piece is selected, and user clicks on their own piece, select it
       setFromSquare(square);
     }
   };
@@ -42,7 +47,7 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
     return board[row]?.[col] || null;
   };
 
-  const fromSquareMoves = fromSquare ? validMoves.filter(m => m.from === fromSquare).map(m => m.to) : [];
+  const possibleMovesForSelectedPiece = fromSquare ? validMoves.filter(m => m.from === fromSquare).map(m => m.to) : [];
 
   return (
     <div className="w-full max-w-[65vh] lg:max-w-[calc(100vh-12rem)] mx-auto">
@@ -56,7 +61,7 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
 
           const isLastMoveSquare = lastMove && (square === lastMove.from || square === lastMove.to);
           const isSelectedSquare = fromSquare === square;
-          const isPossibleMove = fromSquareMoves.includes(square);
+          const isPossibleMove = possibleMovesForSelectedPiece.includes(square);
           const isCaptureMove = isPossibleMove && !!getPieceAtSquare(square);
           
           return (

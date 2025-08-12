@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
-import type { PieceSymbol, Square, Color } from 'chess.js';
+import type { PieceSymbol, Square, Color, Move } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
 
@@ -18,7 +18,6 @@ import { useToast } from '@/hooks/use-toast';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
 type EvolutionMove = { from: Square; to: Square; piece: PieceSymbol, captured: PieceSymbol | undefined };
-type LastMove = { from: Square; to: Square; };
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
   const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
@@ -36,12 +35,13 @@ export default function ChessGame() {
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [status, setStatus] = useState("White's turn to move.");
   const [evolutionPrompt, setEvolutionPrompt] = useState<EvolutionMove | null>(null);
-  const [lastMove, setLastMove] = useState<LastMove | null>(null);
+  const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const { toast } = useToast();
   
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
-  const validMoves = useMemo(() => game.moves({ verbose: true }), [game]);
+  // Generate all possible moves for the current turn
+  const validMoves = useMemo(() => game.moves({ verbose: true }), [game, board]);
 
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -124,35 +124,41 @@ export default function ChessGame() {
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || game.turn() !== playerColor || isAiThinking) return;
 
-    // Default to queen promotion
-    const move = game.move({ from, to, promotion: 'q' });
+    // The chess.js `move` method is smart enough to handle promotions.
+    // We default to 'q' (Queen) for simplicity.
+    const moveAttempt = { from, to, promotion: 'q' };
+    const moveResult = game.move(moveAttempt);
 
-    // If the move is invalid, do nothing.
-    if (!move) {
+    // If move is illegal, chess.js returns null.
+    if (!moveResult) {
       return;
     }
-    
+
     setLastMove({ from, to });
+    setBoard(game.board());
+
+    const wasCapture = !!moveResult.captured;
+    const canEvolve = !!getEvolution(moveResult.piece);
     
-    if (move.captured) {
-      const evolvingPiece = move.piece;
-      if (getEvolution(evolvingPiece)) {
-        playCaptureSound();
-        // The move is valid and results in evolution.
-        // We temporarily undo the move to show the dialog, and will re-apply it in handleEvolution.
-        game.undo(); 
-        setEvolutionPrompt({ from, to, piece: evolvingPiece, captured: move.captured });
+    if (wasCapture) {
+      playCaptureSound();
+      if (canEvolve) {
+        // We temporarily undo the move to show the dialog.
+        // The game state will be correctly restored in handleEvolution.
+        game.undo();
+        setEvolutionPrompt({
+          from,
+          to,
+          piece: moveResult.piece,
+          captured: moveResult.captured,
+        });
         return;
       }
-    }
-      
-    // If there's no capture or no possible evolution, just make the move.
-    if (move.captured) {
-      playCaptureSound();
     } else {
       playMoveSound();
     }
-    setBoard(game.board());
+    // No evolution, so we trigger the AI move if it's their turn.
+    updateStatus();
   };
   
   const handleEvolution = (evolve: boolean) => {
@@ -160,26 +166,24 @@ export default function ChessGame() {
     
     const { from, to, piece } = evolutionPrompt;
     
-    // Re-apply the move. We already know it's valid.
-    const move = game.move({ from, to, promotion: 'q' });
+    // Re-apply the original move.
+    game.move({ from, to, promotion: 'q' });
     
-    if (move) {
-      setLastMove({ from: move.from, to: move.to });
-    
-      if (evolve) {
-        const newPieceType = getEvolution(piece);
-        if (newPieceType) {
-          const color = move.color;
-          game.put({ type: newPieceType, color }, to);
-          playEvolveSound();
-          setShiningPiece(to);
-          setTimeout(() => setShiningPiece(null), 2000);
-        }
+    if (evolve) {
+      const newPieceType = getEvolution(piece);
+      if (newPieceType) {
+        const color = game.get(to)?.color as Color;
+        game.put({ type: newPieceType, color }, to);
+        playEvolveSound();
+        setShiningPiece(to);
+        setTimeout(() => setShiningPiece(null), 2000);
       }
     }
     
+    // Finalize board state and reset prompt
     setBoard(game.board());
     setEvolutionPrompt(null);
+    updateStatus();
   };
   
   const handleNewGame = () => {
