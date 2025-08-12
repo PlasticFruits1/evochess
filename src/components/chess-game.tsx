@@ -18,7 +18,7 @@ import { useToast } from '@/hooks/use-toast';
 import { type Move } from '@/lib/types';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
-type EvolutionMove = { to: Square; piece: PieceSymbol, color: Color };
+type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color: Color };
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
   const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
@@ -34,7 +34,7 @@ export default function ChessGame() {
   const [playerColor] = useState<Color>('w');
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [status, setStatus] = useState("White's turn to move.");
-  const [evolutionPrompt, setEvolutionPrompt] = useState<EvolutionMove | null>(null);
+  const [evolutionPrompt, setEvolutionPrompt] = useState<EvolutionPromptInfo | null>(null);
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const { toast } = useToast();
@@ -66,15 +66,16 @@ export default function ChessGame() {
   }, [game, updateStatus]);
 
   const triggerAiMove = useCallback(async () => {
-    if (isGameOver || game.turn() === playerColor) return;
+    if (isGameOver || game.turn() === playerColor || evolutionPrompt) return;
 
     setIsAiThinking(true);
     try {
       const fen = game.fen();
       const response = await generateChessMove({ boardState: fen, difficulty });
       
-      const gameWithNextMove = new Chess(fen);
-      const move = gameWithNextMove.move(response.move);
+      // The AI can sometimes generate an invalid move. We'll try to use it, but have a fallback.
+      const gameCopy = new Chess(fen);
+      const move = gameCopy.move(response.move);
 
       if (move) {
         setLastMove({ from: move.from, to: move.to });
@@ -83,37 +84,42 @@ export default function ChessGame() {
         } else {
             playMoveSound();
         }
-        setGame(new Chess(gameWithNextMove.fen()));
+        setGame(new Chess(gameCopy.fen()));
       } else {
+        // This case handles when chess.js returns null for an invalid move format.
         console.error("AI generated an invalid move:", response.move);
         toast({
             title: "AI Error",
             description: `The AI tried an invalid move (${response.move}). A random move was played instead.`,
             variant: "destructive"
-        })
+        });
         const moves = game.moves();
         const randomMove = moves[Math.floor(Math.random() * moves.length)];
         const newGame = new Chess(game.fen());
         newGame.move(randomMove);
+        setLastMove(null); // Can't show last move if it's random
         setGame(new Chess(newGame.fen()));
       }
     } catch (error) {
+      // This case handles when chess.js throws an error for a syntactically correct but illegal move.
       console.error("AI move failed, falling back to random move:", error);
       toast({
         title: "AI Error",
         description: `An error occurred while generating the AI move. A random move was played instead.`,
         variant: "destructive"
-      })
+      });
       const moves = game.moves();
       if (moves.length > 0) {
-        const move = moves[Math.floor(Math.random() * moves.length)];
+        const randomMove = moves[Math.floor(Math.random() * moves.length)];
         const newGame = new Chess(game.fen());
-        newGame.move(move);
+        newGame.move(randomMove);
+        setLastMove(null);
         setGame(new Chess(newGame.fen()));
       }
+    } finally {
+        setIsAiThinking(false);
     }
-    setIsAiThinking(false);
-  }, [game, difficulty, playerColor, isGameOver, toast]);
+  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt]);
 
   useEffect(() => {
     if (game.turn() !== playerColor && !isGameOver && !evolutionPrompt) {
@@ -127,29 +133,32 @@ export default function ChessGame() {
     if (isGameOver || game.turn() !== playerColor || isAiThinking || evolutionPrompt) return;
 
     const gameCopy = new Chess(game.fen());
+    // Use promotion: 'q' as a default for pawns reaching the end.
     const moveResult = gameCopy.move({ from, to, promotion: 'q' });
 
     if (!moveResult) {
+      // This case handles invalid moves from the player.
+      toast({
+          title: "Invalid Move",
+          description: "That move is not allowed.",
+          variant: "destructive"
+      });
       return;
     }
-
-    setLastMove({ from, to });
     
+    setLastMove({ from, to });
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
     
-    // Apply the move immediately
+    // Always update the game state with the move first.
     setGame(new Chess(gameCopy.fen()));
     
     if (wasCapture && canEvolve) {
       playCaptureSound();
-      // Set prompt for evolution, the game state is already updated with the move
-      setEvolutionPrompt({ to: moveResult.to, piece: moveResult.piece, color: moveResult.color });
-      return;
+      setEvolutionPrompt({ from, to, piece: moveResult.piece, color: moveResult.color });
     } else if (wasCapture) {
       playCaptureSound();
-    }
-    else {
+    } else {
       playMoveSound();
     }
   };
@@ -162,11 +171,12 @@ export default function ChessGame() {
       const newPieceType = getEvolution(piece);
       
       if (newPieceType) {
-        const newGame = new Chess(game.fen());
+        // We work with the *current* game state, which already includes the move.
+        const newGame = new Chess(game.fen()); 
         newGame.put({ type: newPieceType, color: color }, to);
         playEvolveSound();
         setShiningPiece(to);
-        setTimeout(() => setShiningPiece(null), 2000);
+        setTimeout(() => setShiningPiece(null), 2000); // Shine duration
         setGame(new Chess(newGame.fen()));
       }
     }
@@ -287,5 +297,3 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
-
-    
