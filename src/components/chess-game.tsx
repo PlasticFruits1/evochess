@@ -130,17 +130,16 @@ export default function ChessGame() {
     if (piece?.type === 'p' && ( (piece.color === 'w' && from[1] === '7' && to[1] === '8') || (piece.color === 'b' && from[1] === '2' && to[1] === '1') )) {
         promotion = 'q'; // Default to queen promotion
     }
-
-    const moveResult = game.move({ from, to, promotion });
+    
+    // Create a temporary copy of the game to check the move result
+    const tempGame = new Chess(game.fen());
+    const moveResult = tempGame.move({ from, to, promotion });
     
     // If the move is invalid, do nothing
     if (!moveResult) {
       console.log("Invalid move attempted by player:", { from, to });
       return;
     }
-
-    // Undo the move to check for evolution logic
-    game.undo();
     
     // Now, handle the logic for capture and evolution
     if (moveResult.captured) {
@@ -152,7 +151,7 @@ export default function ChessGame() {
       }
     }
       
-    // If there's no capture or no possible evolution, just make the move.
+    // If there's no capture or no possible evolution, just make the move on the real game instance.
     const finalMove = game.move({ from, to, promotion });
     if (finalMove) {
         if (!finalMove.captured) {
@@ -313,5 +312,3 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
-
-    
