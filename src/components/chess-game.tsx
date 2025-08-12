@@ -133,18 +133,19 @@ export default function ChessGame() {
     }
 
     setLastMove({ from, to });
-
+    
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
     
-    if (wasCapture) {
+    if (wasCapture && canEvolve) {
       playCaptureSound();
-      if (canEvolve) {
-        setEvolutionPrompt({ from, to, piece: moveResult.piece, captured: moveResult.captured });
-        // Don't set the game state yet. Wait for the user's decision.
-        return;
-      }
-    } else {
+      setEvolutionPrompt({ from, to, piece: moveResult.piece, captured: moveResult.captured });
+      // Don't set the game state yet. Wait for the user's decision.
+      return;
+    } else if (wasCapture) {
+      playCaptureSound();
+    }
+    else {
       playMoveSound();
     }
     setGame(gameCopy);
@@ -161,6 +162,7 @@ export default function ChessGame() {
 
     if (!moveResult) {
         // This should not happen if the logic is correct.
+        console.error("Evolution failed because move became invalid.");
         setEvolutionPrompt(null);
         return;
     }
@@ -168,8 +170,8 @@ export default function ChessGame() {
     if (evolve) {
       const newPieceType = getEvolution(piece);
       if (newPieceType) {
-        const color = newGame.get(to)?.color as Color;
-        newGame.put({ type: newPieceType, color }, to);
+        // The piece color is preserved from the moveResult
+        newGame.put({ type: newPieceType, color: moveResult.color }, to);
         playEvolveSound();
         setShiningPiece(to);
         setTimeout(() => setShiningPiece(null), 2000);
@@ -293,3 +295,5 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
+    
