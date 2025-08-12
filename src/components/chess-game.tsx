@@ -68,11 +68,12 @@ export default function ChessGame() {
     if (isGameOver || game.turn() === playerColor) return;
 
     setIsAiThinking(true);
-    const newGame = new Chess(game.fen());
     try {
-      const fen = newGame.fen();
+      const fen = game.fen();
       const response = await generateChessMove({ boardState: fen, difficulty });
-      const move = newGame.move(response.move);
+      
+      const gameWithNextMove = new Chess(fen);
+      const move = gameWithNextMove.move(response.move);
 
       if (move) {
         setLastMove({ from: move.from, to: move.to });
@@ -81,6 +82,7 @@ export default function ChessGame() {
         } else {
             playMoveSound();
         }
+        setGame(gameWithNextMove);
       } else {
         console.error("AI generated an invalid move:", response.move);
         toast({
@@ -88,9 +90,11 @@ export default function ChessGame() {
             description: `The AI tried an invalid move (${response.move}). A random move was played instead.`,
             variant: "destructive"
         })
-        const moves = newGame.moves();
+        const moves = game.moves();
         const randomMove = moves[Math.floor(Math.random() * moves.length)];
+        const newGame = new Chess(game.fen());
         newGame.move(randomMove);
+        setGame(newGame);
       }
     } catch (error) {
       console.error("AI move failed, falling back to random move:", error);
@@ -99,13 +103,14 @@ export default function ChessGame() {
         description: `An error occurred while generating the AI move. A random move was played instead.`,
         variant: "destructive"
       })
-      const moves = newGame.moves();
+      const moves = game.moves();
       if (moves.length > 0) {
         const move = moves[Math.floor(Math.random() * moves.length)];
+        const newGame = new Chess(game.fen());
         newGame.move(move);
+        setGame(newGame);
       }
     }
-    setGame(newGame);
     setIsAiThinking(false);
   }, [game, difficulty, playerColor, isGameOver, toast]);
 
@@ -120,8 +125,8 @@ export default function ChessGame() {
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || game.turn() !== playerColor || isAiThinking) return;
 
-    const newGame = new Chess(game.fen());
-    const moveResult = newGame.move({ from, to, promotion: 'q' });
+    const gameCopy = new Chess(game.fen());
+    const moveResult = gameCopy.move({ from, to, promotion: 'q' });
 
     if (!moveResult) {
       return;
@@ -135,29 +140,30 @@ export default function ChessGame() {
     if (wasCapture) {
       playCaptureSound();
       if (canEvolve) {
-        setEvolutionPrompt({
-          from,
-          to,
-          piece: moveResult.piece,
-          captured: moveResult.captured,
-        });
-        // We set the game state here so the board updates, but the evolution dialog will control the next step.
-        setGame(newGame);
+        setEvolutionPrompt({ from, to, piece: moveResult.piece, captured: moveResult.captured });
+        // Don't set the game state yet. Wait for the user's decision.
         return;
       }
     } else {
       playMoveSound();
     }
-    setGame(newGame);
+    setGame(gameCopy);
   };
   
   const handleEvolution = (evolve: boolean) => {
     if (!evolutionPrompt) return;
     
-    const { to, piece } = evolutionPrompt;
+    const { from, to, piece } = evolutionPrompt;
     
-    // The move is already made, we just might need to evolve the piece
+    // Recreate the move in a new chess instance to ensure state integrity.
     const newGame = new Chess(game.fen());
+    const moveResult = newGame.move({ from, to, promotion: 'q' });
+
+    if (!moveResult) {
+        // This should not happen if the logic is correct.
+        setEvolutionPrompt(null);
+        return;
+    }
 
     if (evolve) {
       const newPieceType = getEvolution(piece);
@@ -220,7 +226,7 @@ export default function ChessGame() {
               {isAiThinking ? <div className="flex items-center gap-2"><Loader /> AI is thinking...</div> : status}
             </div>
             <Button onClick={handleNewGame} variant="secondary" size="lg">New Game</Button>
-            <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || isGameOver}>
+            <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || evolutionPrompt !== null || isGameOver}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select difficulty" />
               </SelectTrigger>
