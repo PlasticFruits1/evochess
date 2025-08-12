@@ -46,7 +46,7 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
 
   return (
     <div className="w-full max-w-[65vh] lg:max-w-[calc(100vh-12rem)] mx-auto">
-      <div className="grid grid-cols-8 aspect-square rounded-lg overflow-hidden shadow-2xl border-2 border-primary/20 bg-primary/10">
+      <div className="grid grid-cols-8 grid-rows-8 aspect-square rounded-lg overflow-hidden shadow-2xl border-2 border-primary/20 bg-primary/10">
         {Array.from({ length: 64 }).map((_, index) => {
           const row = Math.floor(index / 8);
           const col = index % 8;
@@ -64,11 +64,10 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
               key={square}
               onClick={() => handleSquareClick(square)}
               className={cn(
-                'flex justify-center items-center relative group',
+                'flex justify-center items-center relative group h-full w-full',
                 isDark ? 'bg-primary/30' : 'bg-primary/10',
                 turn === getPieceAtSquare(square)?.color && 'cursor-pointer',
-                // Add borders to create the grid lines
-                'border-t border-l border-primary/20'
+                'border border-primary/20'
               )}
             >
               {isLastMoveSquare && <div className="absolute inset-0 bg-accent/30" />}
