@@ -21,7 +21,7 @@ type EvolutionMove = { from: Square; to: Square; piece: PieceSymbol, captured: P
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
   const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
-    p: 'n', n: 'b', b: 'r', r: 'q',
+    p: 'b', b: 'n', n: 'r', r: 'q',
   };
   return evolutionMap[piece.toLowerCase() as PieceSymbol] || null;
 };
@@ -140,7 +140,6 @@ export default function ChessGame() {
     if (wasCapture && canEvolve) {
       playCaptureSound();
       setEvolutionPrompt({ from, to, piece: moveResult.piece, captured: moveResult.captured });
-      // Don't set the game state yet. Wait for the user's decision.
       return;
     } else if (wasCapture) {
       playCaptureSound();
@@ -156,12 +155,10 @@ export default function ChessGame() {
     
     const { from, to, piece } = evolutionPrompt;
     
-    // Recreate the move in a new chess instance to ensure state integrity.
     const newGame = new Chess(game.fen());
     const moveResult = newGame.move({ from, to, promotion: 'q' });
 
     if (!moveResult) {
-        // This should not happen if the logic is correct.
         console.error("Evolution failed because move became invalid.");
         setEvolutionPrompt(null);
         return;
@@ -170,7 +167,6 @@ export default function ChessGame() {
     if (evolve) {
       const newPieceType = getEvolution(piece);
       if (newPieceType) {
-        // The piece color is preserved from the moveResult
         newGame.put({ type: newPieceType, color: moveResult.color }, to);
         playEvolveSound();
         setShiningPiece(to);
