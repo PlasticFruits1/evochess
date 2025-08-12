@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
-import type { PieceSymbol, Square, Color, Move } from 'chess.js';
+import type { PieceSymbol, Square, Color } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
 
@@ -15,9 +15,10 @@ import { EvolutionDialog } from '@/components/evolution-dialog';
 import { Loader } from '@/components/ui/loader';
 import { Crown, Swords } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { type Move } from '@/lib/types';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
-type EvolutionMove = { from: Square; to: Square; piece: PieceSymbol, captured: PieceSymbol | undefined };
+type EvolutionMove = { to: Square; piece: PieceSymbol, color: Color };
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
   const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
@@ -39,7 +40,7 @@ export default function ChessGame() {
   const { toast } = useToast();
   
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
-  const validMoves = useMemo(() => game.moves({ verbose: true }), [game]);
+  const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [game]);
 
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -82,7 +83,7 @@ export default function ChessGame() {
         } else {
             playMoveSound();
         }
-        setGame(gameWithNextMove);
+        setGame(new Chess(gameWithNextMove.fen()));
       } else {
         console.error("AI generated an invalid move:", response.move);
         toast({
@@ -94,7 +95,7 @@ export default function ChessGame() {
         const randomMove = moves[Math.floor(Math.random() * moves.length)];
         const newGame = new Chess(game.fen());
         newGame.move(randomMove);
-        setGame(newGame);
+        setGame(new Chess(newGame.fen()));
       }
     } catch (error) {
       console.error("AI move failed, falling back to random move:", error);
@@ -108,22 +109,22 @@ export default function ChessGame() {
         const move = moves[Math.floor(Math.random() * moves.length)];
         const newGame = new Chess(game.fen());
         newGame.move(move);
-        setGame(newGame);
+        setGame(new Chess(newGame.fen()));
       }
     }
     setIsAiThinking(false);
   }, [game, difficulty, playerColor, isGameOver, toast]);
 
   useEffect(() => {
-    if (game.turn() !== playerColor && !isGameOver) {
+    if (game.turn() !== playerColor && !isGameOver && !evolutionPrompt) {
       const timer = setTimeout(triggerAiMove, 500);
       return () => clearTimeout(timer);
     }
-  }, [game, playerColor, isGameOver, triggerAiMove]);
+  }, [game, playerColor, isGameOver, triggerAiMove, evolutionPrompt]);
 
 
   const handleMove = (from: Square, to: Square) => {
-    if (isGameOver || game.turn() !== playerColor || isAiThinking) return;
+    if (isGameOver || game.turn() !== playerColor || isAiThinking || evolutionPrompt) return;
 
     const gameCopy = new Chess(game.fen());
     const moveResult = gameCopy.move({ from, to, promotion: 'q' });
@@ -137,9 +138,13 @@ export default function ChessGame() {
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
     
+    // Apply the move immediately
+    setGame(new Chess(gameCopy.fen()));
+    
     if (wasCapture && canEvolve) {
       playCaptureSound();
-      setEvolutionPrompt({ from, to, piece: moveResult.piece, captured: moveResult.captured });
+      // Set prompt for evolution, the game state is already updated with the move
+      setEvolutionPrompt({ to: moveResult.to, piece: moveResult.piece, color: moveResult.color });
       return;
     } else if (wasCapture) {
       playCaptureSound();
@@ -147,34 +152,25 @@ export default function ChessGame() {
     else {
       playMoveSound();
     }
-    setGame(gameCopy);
   };
   
   const handleEvolution = (evolve: boolean) => {
     if (!evolutionPrompt) return;
     
-    const { from, to, piece } = evolutionPrompt;
-    
-    const newGame = new Chess(game.fen());
-    const moveResult = newGame.move({ from, to, promotion: 'q' });
-
-    if (!moveResult) {
-        console.error("Evolution failed because move became invalid.");
-        setEvolutionPrompt(null);
-        return;
-    }
-
     if (evolve) {
+      const { to, piece, color } = evolutionPrompt;
       const newPieceType = getEvolution(piece);
+      
       if (newPieceType) {
-        newGame.put({ type: newPieceType, color: moveResult.color }, to);
+        const newGame = new Chess(game.fen());
+        newGame.put({ type: newPieceType, color: color }, to);
         playEvolveSound();
         setShiningPiece(to);
         setTimeout(() => setShiningPiece(null), 2000);
+        setGame(new Chess(newGame.fen()));
       }
     }
     
-    setGame(newGame);
     setEvolutionPrompt(null);
   };
   
