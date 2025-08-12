@@ -44,29 +44,31 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
   const fromSquareMoves = fromSquare ? validMoves.filter(m => m.from === fromSquare).map(m => m.to) : [];
 
   return (
-    <div className="grid grid-cols-8 aspect-square rounded-2xl overflow-hidden shadow-lg border-4 border-card">
-      {board.flat().map((piece, index) => {
+    <div className="grid grid-cols-8 aspect-square rounded-lg overflow-hidden shadow-2xl border-4 border-card/80 bg-card">
+      {Array.from({ length: 64 }).map((_, index) => {
         const row = Math.floor(index / 8);
         const col = index % 8;
         const square = String.fromCharCode('a'.charCodeAt(0) + col) + (8 - row) as Square;
+        const piece = getPieceAtSquare(square);
         const isDark = (row + col) % 2 !== 0;
 
         const isLastMoveSquare = lastMove && (square === lastMove.from || square === lastMove.to);
         const isSelectedSquare = fromSquare === square;
         const isPossibleMove = fromSquareMoves.includes(square);
+        const isCaptureMove = isPossibleMove && !!getPieceAtSquare(square);
         
         return (
           <div
             key={square}
             onClick={() => handleSquareClick(square)}
             className={cn(
-              'flex justify-center items-center relative cursor-pointer',
-              isDark ? 'bg-secondary' : 'bg-background',
-              turn === getPieceAtSquare(square)?.color && 'hover:bg-accent/30',
+              'flex justify-center items-center relative group',
+              isDark ? 'bg-secondary/40' : 'bg-card/20',
+              turn === getPieceAtSquare(square)?.color && 'cursor-pointer',
             )}
           >
-            {isLastMoveSquare && <div className="absolute inset-0 bg-accent/40" />}
-            {isSelectedSquare && <div className="absolute inset-0 bg-primary/40 ring-2 ring-primary" />}
+            {isLastMoveSquare && <div className="absolute inset-0 bg-accent/30" />}
+            {isSelectedSquare && <div className="absolute inset-0 bg-primary/40" />}
             
             {piece && (
               <ChessPiece
@@ -75,13 +77,12 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
               />
             )}
             
-            {isPossibleMove && (
-              <div className="absolute w-1/3 h-1/3 rounded-full bg-primary/50" />
+            {isPossibleMove && !isCaptureMove && (
+              <div className="absolute w-1/4 h-1/4 rounded-full bg-primary/50 opacity-50 group-hover:opacity-100" />
             )}
-
-            <span className="absolute bottom-0 left-1 text-xs font-mono text-foreground/20 select-none">
-              {square}
-            </span>
+            {isCaptureMove && (
+              <div className="absolute inset-1 rounded-full border-4 border-destructive/50 opacity-80 group-hover:opacity-100" />
+            )}
           </div>
         );
       })}

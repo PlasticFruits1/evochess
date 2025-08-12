@@ -6,12 +6,13 @@ import type { PieceSymbol, Square, Color } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
 
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
 import ChessBoard from '@/components/chess-board';
 import { EvolutionDialog } from '@/components/evolution-dialog';
 import { Loader } from '@/components/ui/loader';
+import { Crown, Swords } from 'lucide-react';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
 type EvolutionMove = { from: Square; to: Square; piece: PieceSymbol, captured: PieceSymbol };
@@ -19,7 +20,7 @@ type LastMove = { from: Square; to: Square; };
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
   const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
-    p: 'b', b: 'n', n: 'r', r: 'q',
+    p: 'n', n: 'b', b: 'r', r: 'q',
   };
   return evolutionMap[piece.toLowerCase() as PieceSymbol] || null;
 };
@@ -71,11 +72,14 @@ export default function ChessGame() {
       const move = game.move(response.move, { sloppy: true });
       if (move) {
         setLastMove({ from: move.from, to: move.to });
-        playMoveSound();
+        if (move.captured) {
+            playCaptureSound();
+        } else {
+            playMoveSound();
+        }
       }
     } catch (error) {
       console.error("AI move failed:", error);
-      // Fallback to a random move if AI fails
       const moves = game.moves();
       const move = moves[Math.floor(Math.random() * moves.length)];
       game.move(move);
@@ -109,7 +113,6 @@ export default function ChessGame() {
         const evolvingPiece = moveResult.piece;
         if (getEvolution(evolvingPiece)) {
           setEvolutionPrompt({ from, to, piece: evolvingPiece, captured: moveResult.captured });
-          // Don't update game state yet, wait for user choice
           return;
         }
       } else {
@@ -159,49 +162,78 @@ export default function ChessGame() {
     setIsAiThinking(false);
     setShiningPiece(null);
   };
+  
+  const capturedPieces = (color: Color) => {
+    const history = game.history({verbose: true});
+    const captured = [];
+    for (const move of history) {
+      if(move.captured && move.color !== color) {
+        captured.push(move.captured);
+      }
+    }
+    return captured;
+  }
 
   return (
-    <div className="flex flex-col items-center gap-4 w-full max-w-4xl mx-auto">
-      <h1 className="text-4xl sm:text-5xl font-headline text-primary">Evolving Chess</h1>
-      <Card className="w-full p-4 sm:p-6 shadow-xl bg-card/80 backdrop-blur-sm rounded-2xl">
-        <CardContent className="p-0">
-          <div className="flex flex-col md:flex-row gap-4 justify-between items-center mb-4">
-             <div className="flex items-center gap-4">
-              <Button onClick={handleNewGame} variant="outline">New Game</Button>
-              <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || isGameOver}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select difficulty" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Easy">Easy</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="Hard">Hard</SelectItem>
-                  <SelectItem value="Expert">Expert</SelectItem>
-                  <SelectItem value="Grandmaster">Grandmaster</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="text-center font-semibold text-lg text-foreground/80 h-10 flex items-center justify-center">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-7xl mx-auto p-4">
+      <div className="lg:col-span-2">
+        <ChessBoard
+          board={board}
+          onMove={handleMove}
+          turn={game.turn()}
+          lastMove={lastMove}
+          shiningPiece={shiningPiece}
+          validMoves={game.moves({ verbose: true })}
+        />
+      </div>
+
+      <div className="flex flex-col gap-6">
+        <Card className="bg-card/60 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="font-headline text-3xl text-primary flex items-center gap-2">
+              <Crown /> Evolving Chess
+            </CardTitle>
+            <CardDescription>A magical twist on a classic game.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="text-center font-semibold text-lg text-foreground/80 h-10 flex items-center justify-center p-2 rounded-md bg-secondary/50">
               {isAiThinking ? <div className="flex items-center gap-2"><Loader /> AI is thinking...</div> : status}
             </div>
-          </div>
+            <Button onClick={handleNewGame} variant="secondary" size="lg">New Game</Button>
+            <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || isGameOver}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select difficulty" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Easy">Easy</SelectItem>
+                <SelectItem value="Medium">Medium</SelectItem>
+                <SelectItem value="Hard">Hard</SelectItem>
+                <SelectItem value="Expert">Expert</SelectItem>
+                <SelectItem value="Grandmaster">Grandmaster</SelectItem>
+              </SelectContent>
+            </Select>
+             <div className="text-center mt-2 text-sm text-muted-foreground font-body">
+                {lastMove ? `Last Move: ${lastMove.from}-${lastMove.to}` : "Make your first move to begin."}
+            </div>
+          </CardContent>
+        </Card>
 
-          <div className="relative">
-            <ChessBoard
-              board={board}
-              onMove={handleMove}
-              turn={game.turn()}
-              lastMove={lastMove}
-              shiningPiece={shiningPiece}
-              validMoves={game.moves({ verbose: true })}
-            />
-          </div>
-        
-          <div className="text-center mt-4 text-sm text-muted-foreground font-body">
-              {lastMove ? `Last Move: ${lastMove.from}-${lastMove.to}` : "Make your first move to begin."}
-          </div>
-        </CardContent>
-      </Card>
+        <Card className="bg-card/60 backdrop-blur-sm">
+            <CardHeader>
+                <CardTitle className="text-xl font-headline flex items-center gap-2"><Swords /> Captured Pieces</CardTitle>
+            </CardHeader>
+            <CardContent>
+                <h3 className="font-bold text-muted-foreground mb-2">White's Captures</h3>
+                 <div className="flex flex-wrap gap-1 min-h-[30px]">
+                    {capturedPieces('w').map((p, i) => <span key={i} className='text-2xl'>{pieceToUnicode(p, 'b')}</span>)}
+                </div>
+                <h3 className="font-bold text-muted-foreground mt-4 mb-2">Black's Captures</h3>
+                 <div className="flex flex-wrap gap-1 min-h-[30px]">
+                    {capturedPieces('b').map((p, i) => <span key={i} className='text-2xl'>{pieceToUnicode(p, 'w')}</span>)}
+                </div>
+            </CardContent>
+        </Card>
+      </div>
       
       {evolutionPrompt && (
         <EvolutionDialog
@@ -212,4 +244,18 @@ export default function ChessGame() {
       )}
     </div>
   );
+}
+
+
+function pieceToUnicode(piece: PieceSymbol, color: Color) {
+    const map: Record<PieceSymbol, string> = {
+        'p': '♙',
+        'n': '♘',
+        'b': '♗',
+        'r': '♖',
+        'q': '♕',
+        'k': '♔'
+    };
+    const unicode = map[piece.toLowerCase() as PieceSymbol];
+    return color === 'w' ? unicode : unicode.toLowerCase();
 }
