@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -44,8 +45,8 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
   const fromSquareMoves = fromSquare ? validMoves.filter(m => m.from === fromSquare).map(m => m.to) : [];
 
   return (
-    <div className="w-full max-w-[70vh] lg:max-w-[calc(100vh-10rem)] mx-auto">
-      <div className="grid grid-cols-8 aspect-square rounded-lg overflow-hidden shadow-2xl border-4 border-card/80 bg-card">
+    <div className="w-full max-w-[65vh] lg:max-w-[calc(100vh-12rem)] mx-auto">
+      <div className="grid grid-cols-8 aspect-square rounded-lg overflow-hidden shadow-2xl border-2 border-primary/20 bg-primary/10">
         {Array.from({ length: 64 }).map((_, index) => {
           const row = Math.floor(index / 8);
           const col = index % 8;
@@ -63,13 +64,15 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
               key={square}
               onClick={() => handleSquareClick(square)}
               className={cn(
-                'flex justify-center items-center relative group border border-black/10',
-                isDark ? 'bg-secondary/40' : 'bg-card/20',
+                'flex justify-center items-center relative group',
+                isDark ? 'bg-primary/30' : 'bg-primary/10',
                 turn === getPieceAtSquare(square)?.color && 'cursor-pointer',
+                // Add borders to create the grid lines
+                'border-t border-l border-primary/20'
               )}
             >
               {isLastMoveSquare && <div className="absolute inset-0 bg-accent/30" />}
-              {isSelectedSquare && <div className="absolute inset-0 bg-primary/40" />}
+              {isSelectedSquare && <div className="absolute inset-0 bg-yellow-400/30" />}
               
               {piece && (
                 <ChessPiece
@@ -79,7 +82,7 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
               )}
               
               {isPossibleMove && !isCaptureMove && (
-                <div className="absolute w-1/4 h-1/4 rounded-full bg-primary/50 opacity-50 group-hover:opacity-100" />
+                <div className="absolute w-1/4 h-1/4 rounded-full bg-yellow-400/50 opacity-50 group-hover:opacity-100" />
               )}
               {isCaptureMove && (
                 <div className="absolute inset-1 rounded-full border-4 border-destructive/50 opacity-80 group-hover:opacity-100" />
