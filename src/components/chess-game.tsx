@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
-import type { PieceSymbol, Square, Color, Move } from 'chess.js';
+import type { PieceSymbol, Square, Color } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
 
@@ -14,6 +14,7 @@ import ChessBoard from '@/components/chess-board';
 import { EvolutionDialog } from '@/components/evolution-dialog';
 import { Loader } from '@/components/ui/loader';
 import { Crown, Swords } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
 type EvolutionMove = { from: Square; to: Square; piece: PieceSymbol, captured: PieceSymbol | undefined };
@@ -37,6 +38,7 @@ export default function ChessGame() {
   const [evolutionPrompt, setEvolutionPrompt] = useState<EvolutionMove | null>(null);
   const [lastMove, setLastMove] = useState<LastMove | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
+  const { toast } = useToast();
   
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
   const validMoves = useMemo(() => game.moves({ verbose: true }), [game]);
@@ -71,7 +73,7 @@ export default function ChessGame() {
     try {
       const fen = game.fen();
       const response = await generateChessMove({ boardState: fen, difficulty });
-      const move = game.move(response.move, { sloppy: true });
+      const move = game.move(response.move);
 
       if (move) {
         setLastMove({ from: move.from, to: move.to });
@@ -83,21 +85,33 @@ export default function ChessGame() {
       } else {
         // AI made an invalid move, fallback to a random one
         console.error("AI generated an invalid move:", response.move);
+        toast({
+            title: "AI Error",
+            description: `The AI tried an invalid move (${response.move}). A random move was played instead.`,
+            variant: "destructive"
+        })
         const moves = game.moves();
         const randomMove = moves[Math.floor(Math.random() * moves.length)];
         game.move(randomMove);
       }
     } catch (error) {
       console.error("AI move failed, falling back to random move:", error);
+      toast({
+        title: "AI Error",
+        description: `An error occurred while generating the AI move. A random move was played instead.`,
+        variant: "destructive"
+      })
       // Fallback to a random move if AI fails
       const moves = game.moves();
-      const move = moves[Math.floor(Math.random() * moves.length)];
-      game.move(move);
+      if (moves.length > 0) {
+        const move = moves[Math.floor(Math.random() * moves.length)];
+        game.move(move);
+      }
     }
     
     setBoard(game.board());
     setIsAiThinking(false);
-  }, [game, difficulty, playerColor, isGameOver]);
+  }, [game, difficulty, playerColor, isGameOver, toast]);
 
   useEffect(() => {
     if (game.turn() !== playerColor && !isGameOver) {
@@ -110,9 +124,15 @@ export default function ChessGame() {
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || game.turn() !== playerColor || isAiThinking) return;
 
-    // Check if the move is valid before proceeding
-    const moveResult = game.move({ from, to, promotion: 'q' });
+    // Check for promotion
+    const piece = game.get(from);
+    let promotion: PieceSymbol | undefined = undefined;
+    if (piece?.type === 'p' && ( (piece.color === 'w' && from[1] === '7' && to[1] === '8') || (piece.color === 'b' && from[1] === '2' && to[1] === '1') )) {
+        promotion = 'q'; // Default to queen promotion
+    }
 
+    const moveResult = game.move({ from, to, promotion });
+    
     // If the move is invalid, do nothing
     if (!moveResult) {
       console.log("Invalid move attempted by player:", { from, to });
@@ -126,17 +146,14 @@ export default function ChessGame() {
     if (moveResult.captured) {
       const evolvingPiece = moveResult.piece;
       if (getEvolution(evolvingPiece)) {
-        // A piece was captured and it can evolve. Show the dialog.
         playCaptureSound();
         setEvolutionPrompt({ from, to, piece: evolvingPiece, captured: moveResult.captured });
-        // We return here and wait for the user's choice in the dialog.
-        // The move will be finalized in handleEvolution.
         return;
       }
     }
       
     // If there's no capture or no possible evolution, just make the move.
-    const finalMove = game.move({ from, to, promotion: 'q' });
+    const finalMove = game.move({ from, to, promotion });
     if (finalMove) {
         if (!finalMove.captured) {
           playMoveSound();
@@ -153,8 +170,14 @@ export default function ChessGame() {
     
     const { from, to, piece } = evolutionPrompt;
     
-    // The move is made here, ensuring it's part of the main game state.
-    const move = game.move({ from, to, promotion: 'q' });
+    // Check for promotion
+    const movingPiece = game.get(from);
+    let promotion: PieceSymbol | undefined = undefined;
+    if (movingPiece?.type === 'p' && ( (movingPiece.color === 'w' && from[1] === '7' && to[1] === '8') || (movingPiece.color === 'b' && from[1] === '2' && to[1] === '1') )) {
+        promotion = 'q'; // Default to queen promotion
+    }
+
+    const move = game.move({ from, to, promotion });
     
     if (move) {
       setLastMove({ from: move.from, to: move.to });
@@ -290,3 +313,5 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
+    

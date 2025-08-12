@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -22,7 +23,7 @@ const GenerateChessMoveInputSchema = z.object({
 export type GenerateChessMoveInput = z.infer<typeof GenerateChessMoveInputSchema>;
 
 const GenerateChessMoveOutputSchema = z.object({
-  move: z.string().describe("A string representing the suggested chess move in algebraic notation (e.g., 'e2e4')."),
+  move: z.string().describe("A string representing the suggested chess move in UCI notation (e.g., 'e2e4', 'a1h8'). If it is a promotion, it should include the promotion piece (e.g., 'e7e8q')."),
   explanation: z
     .string()
     .describe("A brief explanation of the AI's reasoning behind the suggested move.")
@@ -46,11 +47,13 @@ Given the current board state in FEN notation:
 
 And the difficulty level: {{difficulty}}
 
-Suggest the best chess move in algebraic notation and briefly explain your reasoning.
+Suggest the best chess move in UCI notation and briefly explain your reasoning.
+
+The move must be in UCI format. For example: e2e4, g1f3, e7e8q (for promotion).
 
 Output format: 
 {
-  "move": "<move_in_algebraic_notation>",
+  "move": "<move_in_uci_notation>",
   "explanation": "<brief_explanation>"
 }
 `,
@@ -68,3 +71,4 @@ const generateChessMoveFlow = ai.defineFlow(
   }
 );
 
+    
