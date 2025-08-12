@@ -225,11 +225,11 @@ export default function ChessGame() {
             <CardContent>
                 <h3 className="font-bold text-muted-foreground mb-2">White's Captures</h3>
                  <div className="flex flex-wrap gap-1 min-h-[30px]">
-                    {capturedPieces('w').map((p, i) => <span key={i} className='text-2xl'>{pieceToUnicode(p, 'b')}</span>)}
+                    {capturedPieces('w').map((p, i) => <span key={i} className='text-xl'>{pieceToUnicode(p, 'b')}</span>)}
                 </div>
                 <h3 className="font-bold text-muted-foreground mt-4 mb-2">Black's Captures</h3>
                  <div className="flex flex-wrap gap-1 min-h-[30px]">
-                    {capturedPieces('b').map((p, i) => <span key={i} className='text-2xl'>{pieceToUnicode(p, 'w')}</span>)}
+                    {capturedPieces('b').map((p, i) => <span key={i} className='text-xl'>{pieceToUnicode(p, 'w')}</span>)}
                 </div>
             </CardContent>
         </Card>
@@ -257,5 +257,13 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
         'k': '♔'
     };
     const unicode = map[piece.toLowerCase() as PieceSymbol];
-    return color === 'w' ? unicode : unicode.toLowerCase();
+    const blackUnicodeMap: Record<string, string> = {
+        '♙': '♟',
+        '♘': '♞',
+        '♗': '♝',
+        '♖': '♜',
+        '♕': '♛',
+        '♔': '♚'
+    };
+    return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }

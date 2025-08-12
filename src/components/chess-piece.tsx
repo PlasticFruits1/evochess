@@ -42,7 +42,7 @@ export function ChessPiece({ piece, isEvolving }: ChessPieceProps) {
     )}>
         <span
             className={cn(
-                "text-5xl md:text-6xl drop-shadow-lg",
+                "text-4xl md:text-5xl drop-shadow-lg",
                 piece.color === 'w' ? 'text-stone-50' : 'text-stone-900',
             )}
             style={{
