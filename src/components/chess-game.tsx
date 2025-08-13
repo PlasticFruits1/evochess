@@ -86,6 +86,7 @@ export default function ChessGame() {
   }, [game, isGameOver]);
 
   const updateEvaluation = useCallback(async (fen: string) => {
+    if(isGameOver) return;
     setIsEvaluating(true);
     try {
       const response = await evaluateBoard({ boardState: fen });
@@ -96,17 +97,15 @@ export default function ChessGame() {
     } finally {
       setIsEvaluating(false);
     }
-  }, []);
+  }, [isGameOver]);
 
   useEffect(() => {
     updateStatus();
-    if (!isGameOver) {
-      updateEvaluation(game.fen());
-    }
-  }, [game, updateStatus, isGameOver, updateEvaluation]);
+    updateEvaluation(game.fen());
+  }, [game, updateStatus, updateEvaluation]);
 
   const triggerAiMove = useCallback(async () => {
-    if (isGameOver || game.turn() === playerColor || evolutionPrompt) return;
+    if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt) return;
 
     setIsAiThinking(true);
     try {
@@ -114,6 +113,7 @@ export default function ChessGame() {
       const response = await generateChessMove({ boardState: fen, difficulty });
       
       const gameCopy = new Chess(fen);
+      // The AI can sometimes generate an invalid move. We'll try to use it, but have a fallback.
       const move = gameCopy.move(response.move);
 
       if (move) {
@@ -125,13 +125,25 @@ export default function ChessGame() {
         }
         setGame(new Chess(gameCopy.fen()));
       } else {
-         throw new Error(`Invalid move from AI: ${response.move}`);
+         toast({
+            title: "AI Error",
+            description: `The AI suggested an invalid move (${response.move}). A random move was played instead.`,
+            variant: "destructive"
+          });
+         const moves = game.moves();
+         if (moves.length > 0) {
+            const randomMove = moves[Math.floor(Math.random() * moves.length)];
+            const newGame = new Chess(game.fen());
+            newGame.move(randomMove);
+            setGame(new Chess(newGame.fen()));
+            setLastMove(null);
+          }
       }
     } catch (error) {
       console.error("AI move failed, falling back to random move:", error);
       toast({
         title: "AI Error",
-        description: `An error occurred while generating the AI move. A random move was played instead.`,
+        description: `The AI made an illegal move. A random move was played instead.`,
         variant: "destructive"
       });
       const moves = game.moves();
@@ -148,11 +160,11 @@ export default function ChessGame() {
   }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt]);
 
   useEffect(() => {
-    if (game.turn() !== playerColor && !isGameOver && !evolutionPrompt && !gameOverInfo) {
+    if (game.turn() !== playerColor && !isGameOver && !isAiThinking && !evolutionPrompt) {
       const timer = setTimeout(triggerAiMove, 500);
       return () => clearTimeout(timer);
     }
-  }, [game, playerColor, isGameOver, triggerAiMove, evolutionPrompt, gameOverInfo]);
+  }, [game, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt]);
 
 
   const handleMove = (from: Square, to: Square) => {
@@ -195,13 +207,13 @@ export default function ChessGame() {
     if (!evolutionPrompt) return;
     
     const { to, piece, color } = evolutionPrompt;
-    setEvolutionPrompt(null); // Close dialog immediately
-
+    
     if (evolve) {
       const newPieceType = getEvolution(piece);
       
       if (newPieceType) {
-        const gameCopy = new Chess(game.fen());
+        // We use the *current* game state, which already includes the move.
+        const gameCopy = new Chess(game.fen()); 
         gameCopy.put({ type: newPieceType, color: color }, to);
         playEvolveSound();
         setShiningPiece(to);
@@ -209,6 +221,8 @@ export default function ChessGame() {
         setGame(new Chess(gameCopy.fen()));
       }
     }
+    // Whether we evolved or not, we close the dialog now.
+    setEvolutionPrompt(null);
   };
 
   const handleNewGame = () => {
@@ -236,17 +250,19 @@ export default function ChessGame() {
 
   return (
     <div className="flex justify-center items-center gap-8 w-full max-w-7xl mx-auto p-4">
-       <EvaluationBar evaluation={evaluation} isEvaluating={isEvaluating} />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-6xl">
-        <div className="lg:col-span-2">
-          <ChessBoard
-            board={game.board()}
-            onMove={handleMove}
-            turn={game.turn()}
-            lastMove={lastMove}
-            shiningPiece={shiningPiece}
-            validMoves={validMoves}
-          />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
+        <div className="lg:col-span-2 flex justify-center items-center gap-4">
+          <div className="w-full max-w-[65vh] lg:max-w-[calc(100vh-12rem)]">
+            <ChessBoard
+              board={game.board()}
+              onMove={handleMove}
+              turn={game.turn()}
+              lastMove={lastMove}
+              shiningPiece={shiningPiece}
+              validMoves={validMoves}
+            />
+          </div>
+          <EvaluationBar evaluation={evaluation} isEvaluating={isEvaluating} />
         </div>
 
         <div className="flex flex-col gap-6">
@@ -340,4 +356,3 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
-

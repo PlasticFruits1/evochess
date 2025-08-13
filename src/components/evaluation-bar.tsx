@@ -23,7 +23,7 @@ export function EvaluationBar({ evaluation, isEvaluating }: EvaluationBarProps) 
 
   return (
     <div className="flex flex-col items-center h-full">
-      <div className="relative w-8 h-[65vh] lg:h-[calc(100vh-12rem)] bg-stone-900 rounded-full overflow-hidden border-2 border-primary/20 flex flex-col">
+      <div className="relative w-8 h-full bg-stone-900 rounded-full overflow-hidden border-2 border-primary/20 flex flex-col">
         <div
           className="bg-stone-50 transition-all duration-500"
           style={{ height: `${blackAdvantagePercent}%` }}
@@ -42,5 +42,3 @@ export function EvaluationBar({ evaluation, isEvaluating }: EvaluationBarProps) 
     </div>
   );
 }
-
-    
