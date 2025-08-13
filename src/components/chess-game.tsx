@@ -34,6 +34,17 @@ const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
   return evolutionMap[piece.toLowerCase() as PieceSymbol] || null;
 };
 
+const capturedPieces = (game: Chess, color: Color) => {
+    const history = game.history({verbose: true});
+    const captured = [];
+    for (const move of history) {
+      if(move.captured && move.color !== color) {
+        captured.push(move.captured);
+      }
+    }
+    return captured;
+  };
+
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
   const [game, setGame] = useState(new Chess());
@@ -222,17 +233,6 @@ export default function ChessGame() {
     }
     handleNewGame();
   };
-  
-  const capturedPieces = (color: Color) => {
-    const history = game.history({verbose: true});
-    const captured = [];
-    for (const move of history) {
-      if(move.captured && move.color !== color) {
-        captured.push(move.captured);
-      }
-    }
-    return captured;
-  };
 
   return (
     <div className="flex justify-center items-start gap-8 w-full max-w-7xl mx-auto p-4">
@@ -283,15 +283,15 @@ export default function ChessGame() {
           <Card className="bg-card/60 backdrop-blur-sm">
               <CardHeader>
                   <CardTitle className="text-xl font-headline flex items-center gap-2"><Swords /> Captured Pieces</CardTitle>
-              </Header>
+              </CardHeader>
               <CardContent>
                   <h3 className="font-bold text-muted-foreground mb-2">White's Captures (Black pieces)</h3>
                    <div className="flex flex-wrap gap-1 min-h-[30px]">
-                      {capturedPieces('w').map((p, i) => <span key={i} className='text-xl'>{pieceToUnicode(p, 'b')}</span>)}
+                      {capturedPieces(game, 'w').map((p, i) => <span key={i} className='text-xl'>{pieceToUnicode(p, 'b')}</span>)}
                   </div>
                   <h3 className="font-bold text-muted-foreground mt-4 mb-2">Black's Captures (White pieces)</h3>
                    <div className="flex flex-wrap gap-1 min-h-[30px]">
-                      {capturedPieces('b').map((p, i) => <span key={i} className='text-xl'>{pieceToUnicode(p, 'w')}</span>)}
+                      {capturedPieces(game, 'b').map((p, i) => <span key={i} className='text-xl'>{pieceToUnicode(p, 'w')}</span>)}
                   </div>
               </CardContent>
           </Card>
