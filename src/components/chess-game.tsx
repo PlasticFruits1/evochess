@@ -59,6 +59,7 @@ export default function ChessGame() {
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const [evaluation, setEvaluation] = useState(0);
   const [isEvaluating, setIsEvaluating] = useState(false);
+  const [evaluationDisabled, setEvaluationDisabled] = useState(false);
   const { toast } = useToast();
   
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
@@ -87,22 +88,31 @@ export default function ChessGame() {
   }, [game, isGameOver]);
 
   const updateEvaluation = useCallback(async (fen: string) => {
-    if(isGameOver) return;
+    if(isGameOver || evaluationDisabled) return;
     setIsEvaluating(true);
     try {
       const response = await evaluateBoard({ boardState: fen });
       setEvaluation(response.evaluation);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Evaluation failed:", error);
-       toast({
-        title: "Evaluation API Error",
-        description: "Could not fetch board evaluation. You may have exceeded API quotas.",
-        variant: "destructive",
-      });
+      if (error.message?.includes("429")) {
+         toast({
+            title: "Evaluation Limit Reached",
+            description: "You've exceeded the daily quota for the evaluation API. This feature will be disabled for now.",
+            variant: "destructive",
+        });
+        setEvaluationDisabled(true);
+      } else {
+         toast({
+          title: "Evaluation API Error",
+          description: "Could not fetch board evaluation.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setIsEvaluating(false);
     }
-  }, [isGameOver, toast]);
+  }, [isGameOver, toast, evaluationDisabled]);
   
   const triggerAiMove = useCallback(async (currentFen: string) => {
     if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt) return;
@@ -185,9 +195,7 @@ export default function ChessGame() {
     setLastMove({ from, to });
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
-    const newGame = new Chess(gameCopy.fen());
-    setGame(newGame);
-
+    
     if (wasCapture && canEvolve) {
       playCaptureSound();
       setEvolutionPrompt({
@@ -197,12 +205,16 @@ export default function ChessGame() {
         color: moveResult.color,
         captured: moveResult.captured
       });
+      const newGame = new Chess(gameCopy.fen());
+      setGame(newGame);
     } else {
        if (wasCapture) {
         playCaptureSound();
       } else {
         playMoveSound();
       }
+      const newGame = new Chess(gameCopy.fen());
+      setGame(newGame);
     }
   };
 
@@ -241,7 +253,9 @@ export default function ChessGame() {
     setIsAiThinking(false);
     setShiningPiece(null);
     setEvaluation(0);
-    updateEvaluation(newGame.fen());
+    if (newPlayerColor === 'b') {
+        updateEvaluation(newGame.fen());
+    }
   }, [updateEvaluation]);
 
   useEffect(() => {
@@ -276,7 +290,7 @@ export default function ChessGame() {
               playerColor={playerColor}
             />
           </div>
-          <EvaluationBar evaluation={evaluation} isEvaluating={isEvaluating} />
+          <EvaluationBar evaluation={evaluation} isEvaluating={isEvaluating} isDisabled={evaluationDisabled} />
         </div>
 
         <div className="flex flex-col gap-6">
@@ -374,3 +388,4 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
