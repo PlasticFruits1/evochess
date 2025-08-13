@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from '@/components/ui/button';
 import ChessBoard from '@/components/chess-board';
 import { EvolutionDialog } from '@/components/evolution-dialog';
+import { GameOverDialog } from '@/components/game-over-dialog';
 import { Loader } from '@/components/ui/loader';
 import { Crown, Swords } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -19,6 +20,10 @@ import { type Move } from '@/lib/types';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
 type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color: Color, captured: PieceSymbol | undefined };
+type GameOverInfo = { status: string; winner: 'White' | 'Black' | 'Draw' };
+
+
+const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard', 'Expert', 'Grandmaster'];
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
   const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
@@ -35,6 +40,7 @@ export default function ChessGame() {
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [status, setStatus] = useState("White's turn to move.");
   const [evolutionPrompt, setEvolutionPrompt] = useState<EvolutionPromptInfo | null>(null);
+  const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null);
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const { toast } = useToast();
@@ -45,14 +51,17 @@ export default function ChessGame() {
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
     if (isGameOver) {
+      playGameOverSound();
       if (game.isCheckmate()) {
-        newStatus = `Checkmate! ${game.turn() === 'w' ? 'Black' : 'White'} wins.`;
-        playGameOverSound();
+        const winner = game.turn() === 'w' ? 'Black' : 'White';
+        newStatus = `Checkmate! ${winner} wins.`;
+        setGameOverInfo({ status: newStatus, winner });
       } else if (game.isDraw()) {
         newStatus = "Draw!";
-        playGameOverSound();
+        setGameOverInfo({ status: newStatus, winner: 'Draw' });
       } else {
         newStatus = "Game Over.";
+        setGameOverInfo({ status: newStatus, winner: 'Draw' });
       }
     } else if (game.inCheck()) {
       newStatus = `Check! ${newStatus}`;
@@ -99,8 +108,8 @@ export default function ChessGame() {
         const randomMove = moves[Math.floor(Math.random() * moves.length)];
         const newGame = new Chess(game.fen());
         newGame.move(randomMove);
-        setLastMove(null);
         setGame(new Chess(newGame.fen()));
+        setLastMove(null);
       }
     } finally {
         setIsAiThinking(false);
@@ -108,11 +117,11 @@ export default function ChessGame() {
   }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt]);
 
   useEffect(() => {
-    if (game.turn() !== playerColor && !isGameOver && !evolutionPrompt) {
+    if (game.turn() !== playerColor && !isGameOver && !evolutionPrompt && !gameOverInfo) {
       const timer = setTimeout(triggerAiMove, 500);
       return () => clearTimeout(timer);
     }
-  }, [game, playerColor, isGameOver, triggerAiMove, evolutionPrompt]);
+  }, [game, playerColor, isGameOver, triggerAiMove, evolutionPrompt, gameOverInfo]);
 
 
   const handleMove = (from: Square, to: Square) => {
@@ -128,13 +137,13 @@ export default function ChessGame() {
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
 
-    setLastMove({ from, to });
-    
-    // First, update the board with the move.
+    // Update the board with the move immediately.
     setGame(new Chess(gameCopy.fen()));
+    setLastMove({ from, to });
 
     if (wasCapture && canEvolve) {
       playCaptureSound();
+      // Set the evolution prompt *after* updating the game state with the move.
       setEvolutionPrompt({
         from,
         to,
@@ -176,8 +185,21 @@ export default function ChessGame() {
     setStatus("New game started. White's turn.");
     setLastMove(null);
     setEvolutionPrompt(null);
+    setGameOverInfo(null);
     setIsAiThinking(false);
     setShiningPiece(null);
+  };
+
+  const handleRematch = () => {
+    handleNewGame();
+  };
+
+  const handleIncreaseDifficulty = () => {
+    const currentIndex = difficulties.indexOf(difficulty);
+    if (currentIndex < difficulties.length - 1) {
+      setDifficulty(difficulties[currentIndex + 1]);
+    }
+    handleNewGame();
   };
   
   const capturedPieces = (color: Color) => {
@@ -257,6 +279,16 @@ export default function ChessGame() {
           open={!!evolutionPrompt}
           piece={evolutionPrompt.piece}
           onEvolve={handleEvolution}
+        />
+      )}
+
+      {gameOverInfo && (
+        <GameOverDialog
+          open={!!gameOverInfo}
+          status={gameOverInfo.status}
+          onRematch={handleRematch}
+          onIncreaseDifficulty={handleIncreaseDifficulty}
+          canIncreaseDifficulty={difficulties.indexOf(difficulty) < difficulties.length - 1}
         />
       )}
     </div>
