@@ -93,16 +93,19 @@ export default function ChessGame() {
       setEvaluation(response.evaluation);
     } catch (error) {
       console.error("Evaluation failed:", error);
-      // Don't show a toast for this, as it's a background task.
+       toast({
+        title: "Evaluation API Error",
+        description: "Could not fetch board evaluation. You may have exceeded API quotas.",
+        variant: "destructive",
+      });
     } finally {
       setIsEvaluating(false);
     }
-  }, [isGameOver]);
+  }, [isGameOver, toast]);
 
   useEffect(() => {
     updateStatus();
-    updateEvaluation(game.fen());
-  }, [game, updateStatus, updateEvaluation]);
+  }, [game, updateStatus]);
 
   const triggerAiMove = useCallback(async () => {
     if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt) return;
@@ -114,7 +117,7 @@ export default function ChessGame() {
       
       const gameCopy = new Chess(fen);
       // The AI can sometimes generate an invalid move. We'll try to use it, but have a fallback.
-      const move = gameCopy.move(response.move);
+      const move = gameCopy.move(response.move, {strict: true});
 
       if (move) {
         setLastMove({ from: move.from, to: move.to });
@@ -123,8 +126,11 @@ export default function ChessGame() {
         } else {
             playMoveSound();
         }
-        setGame(new Chess(gameCopy.fen()));
+        const newGame = new Chess(gameCopy.fen());
+        setGame(newGame);
+        updateEvaluation(newGame.fen());
       } else {
+         // This block should ideally not be reached if the AI is well-behaved, but it's a good fallback.
          toast({
             title: "AI Error",
             description: `The AI suggested an invalid move (${response.move}). A random move was played instead.`,
@@ -137,13 +143,14 @@ export default function ChessGame() {
             newGame.move(randomMove);
             setGame(new Chess(newGame.fen()));
             setLastMove(null);
+            updateEvaluation(newGame.fen());
           }
       }
     } catch (error) {
       console.error("AI move failed, falling back to random move:", error);
       toast({
         title: "AI Error",
-        description: `The AI made an illegal move. A random move was played instead.`,
+        description: `An AI error occurred. A random move was played instead.`,
         variant: "destructive"
       });
       const moves = game.moves();
@@ -153,11 +160,12 @@ export default function ChessGame() {
         newGame.move(randomMove);
         setGame(new Chess(newGame.fen()));
         setLastMove(null);
+        updateEvaluation(newGame.fen());
       }
     } finally {
         setIsAiThinking(false);
     }
-  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt]);
+  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, updateEvaluation]);
 
   useEffect(() => {
     if (game.turn() !== playerColor && !isGameOver && !isAiThinking && !evolutionPrompt) {
@@ -177,8 +185,6 @@ export default function ChessGame() {
       return;
     }
     
-    // Update the board with the move immediately.
-    setGame(new Chess(gameCopy.fen()));
     setLastMove({ from, to });
 
     const wasCapture = !!moveResult.captured;
@@ -186,7 +192,6 @@ export default function ChessGame() {
 
     if (wasCapture && canEvolve) {
       playCaptureSound();
-      // Set the evolution prompt *after* updating the game state with the move.
       setEvolutionPrompt({
         from,
         to,
@@ -194,12 +199,16 @@ export default function ChessGame() {
         color: moveResult.color,
         captured: moveResult.captured
       });
+      // Set the game state immediately to show the move
+      setGame(new Chess(gameCopy.fen()));
     } else {
-      if (wasCapture) {
+       if (wasCapture) {
         playCaptureSound();
       } else {
         playMoveSound();
       }
+      // Finalize the move immediately
+      setGame(new Chess(gameCopy.fen()));
     }
   };
 
@@ -208,11 +217,11 @@ export default function ChessGame() {
     
     const { to, piece, color } = evolutionPrompt;
     
+    // The game state is already updated with the move, we just need to maybe change the piece
     if (evolve) {
       const newPieceType = getEvolution(piece);
       
       if (newPieceType) {
-        // We use the *current* game state, which already includes the move.
         const gameCopy = new Chess(game.fen()); 
         gameCopy.put({ type: newPieceType, color: color }, to);
         playEvolveSound();
@@ -234,6 +243,7 @@ export default function ChessGame() {
     setIsAiThinking(false);
     setShiningPiece(null);
     setEvaluation(0);
+    updateEvaluation(new Chess().fen());
   };
 
   const handleRematch = () => {
