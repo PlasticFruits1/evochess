@@ -85,7 +85,7 @@ export default function ChessGame() {
         }
         setGame(new Chess(gameCopy.fen()));
       } else {
-         throw new Error(`Invalid move format: ${response.move}`);
+         throw new Error(`Invalid move from AI: ${response.move}`);
       }
     } catch (error) {
       console.error("AI move failed, falling back to random move:", error);
@@ -117,64 +117,62 @@ export default function ChessGame() {
 
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || game.turn() !== playerColor || isAiThinking || evolutionPrompt) return;
-  
+
     const gameCopy = new Chess(game.fen());
     const moveResult = gameCopy.move({ from, to, promotion: 'q' });
-  
+
     if (!moveResult) {
-      toast({
-        title: "Invalid Move",
-        description: "That move is not allowed.",
-        variant: "destructive"
-      });
+      // Don't toast here, as the UI should prevent invalid moves.
       return;
     }
-  
+
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
-  
+
     setLastMove({ from, to });
-  
+    
+    // First, update the board with the move.
+    setGame(new Chess(gameCopy.fen()));
+
     if (wasCapture && canEvolve) {
       playCaptureSound();
-      setEvolutionPrompt({ 
-        from, 
-        to, 
-        piece: moveResult.piece, 
-        color: moveResult.color, 
-        captured: moveResult.captured 
+      setEvolutionPrompt({
+        from,
+        to,
+        piece: moveResult.piece,
+        color: moveResult.color,
+        captured: moveResult.captured
       });
-      setGame(new Chess(gameCopy.fen()));
     } else {
       if (wasCapture) {
         playCaptureSound();
       } else {
         playMoveSound();
       }
-      setGame(new Chess(gameCopy.fen()));
     }
   };
-  
+
   const handleEvolution = (evolve: boolean) => {
     if (!evolutionPrompt) return;
     
+    const { to, piece, color } = evolutionPrompt;
+    setEvolutionPrompt(null); // Close dialog immediately
+
     if (evolve) {
-      const { to, piece, color } = evolutionPrompt;
       const newPieceType = getEvolution(piece);
       
       if (newPieceType) {
-        const newGame = new Chess(game.fen()); 
-        newGame.put({ type: newPieceType, color: color }, to);
+        const gameCopy = new Chess(game.fen());
+        gameCopy.put({ type: newPieceType, color: color }, to);
         playEvolveSound();
         setShiningPiece(to);
         setTimeout(() => setShiningPiece(null), 2000); // Shine duration
-        setGame(new Chess(newGame.fen()));
+        setGame(new Chess(gameCopy.fen()));
       }
     }
-    
-    setEvolutionPrompt(null);
+    // If not evolving, the game state is already correct from handleMove.
   };
-  
+
   const handleNewGame = () => {
     setGame(new Chess());
     setStatus("New game started. White's turn.");
@@ -193,7 +191,7 @@ export default function ChessGame() {
       }
     }
     return captured;
-  }
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-7xl mx-auto p-4">
