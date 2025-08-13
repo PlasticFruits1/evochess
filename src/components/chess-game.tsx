@@ -15,10 +15,11 @@ import ChessBoard from '@/components/chess-board';
 import { EvolutionDialog } from '@/components/evolution-dialog';
 import { GameOverDialog } from '@/components/game-over-dialog';
 import { Loader } from '@/components/ui/loader';
-import { Crown, Swords } from 'lucide-react';
+import { Crown, Swords, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { type Move } from '@/lib/types';
 import { EvaluationBar } from '@/components/evaluation-bar';
+import { cn } from '@/lib/utils';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
 type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color: Color, captured: PieceSymbol | undefined };
@@ -49,7 +50,7 @@ export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
   const [game, setGame] = useState(new Chess());
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
-  const [playerColor] = useState<Color>('w');
+  const [playerColor, setPlayerColor] = useState<Color>('w');
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [status, setStatus] = useState("White's turn to move.");
   const [evolutionPrompt, setEvolutionPrompt] = useState<EvolutionPromptInfo | null>(null);
@@ -102,20 +103,15 @@ export default function ChessGame() {
       setIsEvaluating(false);
     }
   }, [isGameOver, toast]);
-
-  useEffect(() => {
-    updateStatus();
-  }, [game, updateStatus]);
-
-  const triggerAiMove = useCallback(async () => {
+  
+  const triggerAiMove = useCallback(async (currentFen: string) => {
     if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt) return;
 
     setIsAiThinking(true);
     try {
-      const fen = game.fen();
-      const response = await generateChessMove({ boardState: fen, difficulty });
+      const response = await generateChessMove({ boardState: currentFen, difficulty });
       
-      const gameCopy = new Chess(fen);
+      const gameCopy = new Chess(currentFen);
       // The AI can sometimes generate an invalid move. We'll try to use it, but have a fallback.
       const move = gameCopy.move(response.move, {strict: true});
 
@@ -165,14 +161,15 @@ export default function ChessGame() {
     } finally {
         setIsAiThinking(false);
     }
-  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, updateEvaluation]);
+  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, updateEvaluation, updateStatus]);
 
   useEffect(() => {
+    updateStatus();
     if (game.turn() !== playerColor && !isGameOver && !isAiThinking && !evolutionPrompt) {
-      const timer = setTimeout(triggerAiMove, 500);
+      const timer = setTimeout(() => triggerAiMove(game.fen()), 500);
       return () => clearTimeout(timer);
     }
-  }, [game, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt]);
+  }, [game, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, updateStatus]);
 
 
   const handleMove = (from: Square, to: Square) => {
@@ -186,9 +183,10 @@ export default function ChessGame() {
     }
     
     setLastMove({ from, to });
-
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
+    const newGame = new Chess(gameCopy.fen());
+    setGame(newGame);
 
     if (wasCapture && canEvolve) {
       playCaptureSound();
@@ -199,16 +197,12 @@ export default function ChessGame() {
         color: moveResult.color,
         captured: moveResult.captured
       });
-      // Set the game state immediately to show the move
-      setGame(new Chess(gameCopy.fen()));
     } else {
        if (wasCapture) {
         playCaptureSound();
       } else {
         playMoveSound();
       }
-      // Finalize the move immediately
-      setGame(new Chess(gameCopy.fen()));
     }
   };
 
@@ -217,7 +211,6 @@ export default function ChessGame() {
     
     const { to, piece, color } = evolutionPrompt;
     
-    // The game state is already updated with the move, we just need to maybe change the piece
     if (evolve) {
       const newPieceType = getEvolution(piece);
       
@@ -227,15 +220,20 @@ export default function ChessGame() {
         playEvolveSound();
         setShiningPiece(to);
         setTimeout(() => setShiningPiece(null), 2000); // Shine duration
-        setGame(new Chess(gameCopy.fen()));
+        const newGame = new Chess(gameCopy.fen());
+        setGame(newGame);
       }
     }
-    // Whether we evolved or not, we close the dialog now.
     setEvolutionPrompt(null);
   };
 
-  const handleNewGame = () => {
-    setGame(new Chess());
+  const handleNewGame = useCallback(() => {
+    const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
+    setPlayerColor(newPlayerColor);
+    
+    const newGame = new Chess();
+    setGame(newGame);
+
     setStatus("New game started. White's turn.");
     setLastMove(null);
     setEvolutionPrompt(null);
@@ -243,8 +241,13 @@ export default function ChessGame() {
     setIsAiThinking(false);
     setShiningPiece(null);
     setEvaluation(0);
-    updateEvaluation(new Chess().fen());
-  };
+    updateEvaluation(newGame.fen());
+  }, [updateEvaluation]);
+
+  useEffect(() => {
+    handleNewGame();
+  }, [handleNewGame]);
+
 
   const handleRematch = () => {
     handleNewGame();
@@ -270,6 +273,7 @@ export default function ChessGame() {
               lastMove={lastMove}
               shiningPiece={shiningPiece}
               validMoves={validMoves}
+              playerColor={playerColor}
             />
           </div>
           <EvaluationBar evaluation={evaluation} isEvaluating={isEvaluating} />
@@ -284,6 +288,10 @@ export default function ChessGame() {
               <CardDescription>A magical twist on a classic game.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
+               <div className="flex items-center justify-center gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
+                  <User /> You are playing as 
+                  <span className={cn("font-bold", playerColor === 'w' ? 'text-stone-50' : 'text-stone-900', 'drop-shadow-lg')}>{playerColor === 'w' ? 'White' : 'Black'}</span>
+              </div>
               <div className="text-center font-semibold text-lg text-foreground/80 h-10 flex items-center justify-center p-2 rounded-md bg-secondary/50">
                 {isAiThinking ? <div className="flex items-center gap-2"><Loader /> AI is thinking...</div> : status}
               </div>

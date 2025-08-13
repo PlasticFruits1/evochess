@@ -1,3 +1,4 @@
+
 import type { Piece } from '@/lib/types';
 import type { PieceSymbol, Color } from 'chess.js';
 import { cn } from '@/lib/utils';
@@ -5,6 +6,7 @@ import { cn } from '@/lib/utils';
 interface ChessPieceProps {
   piece: Piece;
   isEvolving: boolean;
+  isFlipped?: boolean;
 }
 
 function pieceToUnicode(piece: PieceSymbol, color: Color) {
@@ -30,7 +32,7 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
 }
 
 
-export function ChessPiece({ piece, isEvolving }: ChessPieceProps) {
+export function ChessPiece({ piece, isEvolving, isFlipped }: ChessPieceProps) {
   if (!piece) return null;
 
   const unicodePiece = pieceToUnicode(piece.type, piece.color);
@@ -38,7 +40,8 @@ export function ChessPiece({ piece, isEvolving }: ChessPieceProps) {
   return (
     <div className={cn(
         "w-full h-full p-1 transition-transform duration-200 ease-in-out group-hover:scale-110 flex items-center justify-center",
-        isEvolving && "shimmer"
+        isEvolving && "shimmer",
+        isFlipped && "rotate-180"
     )}>
         <span
             className={cn(
