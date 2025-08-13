@@ -85,7 +85,6 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
                   <ChessPiece
                     piece={piece}
                     isEvolving={shiningPiece === square}
-                    isFlipped={playerColor === 'b'}
                   />
                 )}
                 
