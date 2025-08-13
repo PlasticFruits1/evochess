@@ -15,15 +15,17 @@ import ChessBoard from '@/components/chess-board';
 import { EvolutionDialog } from '@/components/evolution-dialog';
 import { GameOverDialog } from '@/components/game-over-dialog';
 import { Loader } from '@/components/ui/loader';
-import { Crown, Swords, User } from 'lucide-react';
+import { Crown, Swords, User, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { type Move } from '@/lib/types';
 import { EvaluationBar } from '@/components/evaluation-bar';
 import { cn } from '@/lib/utils';
+import { Label } from '@/components/ui/label';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
 type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color: Color, captured: PieceSymbol | undefined };
 type GameOverInfo = { status: string; winner: 'White' | 'Black' | 'Draw' };
+type GameMode = 'vs-ai' | 'vs-player';
 
 
 const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard', 'Expert', 'Grandmaster'];
@@ -49,6 +51,7 @@ const capturedPieces = (game: Chess, color: Color) => {
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
   const [game, setGame] = useState(new Chess());
+  const [gameMode, setGameMode] = useState<GameMode>('vs-ai');
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [playerColor, setPlayerColor] = useState<Color>('w');
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -64,6 +67,11 @@ export default function ChessGame() {
   
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
   const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [game]);
+
+  const isPlayerTurn = useMemo(() => {
+    if (gameMode === 'vs-player') return true;
+    return game.turn() === playerColor;
+  }, [game, gameMode, playerColor]);
 
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -88,7 +96,7 @@ export default function ChessGame() {
   }, [game, isGameOver]);
 
   const updateEvaluation = useCallback(async (fen: string) => {
-    if(isGameOver || evaluationDisabled) return;
+    if(isGameOver || evaluationDisabled || gameMode === 'vs-player') return;
     setIsEvaluating(true);
     try {
       const response = await evaluateBoard({ boardState: fen });
@@ -112,10 +120,10 @@ export default function ChessGame() {
     } finally {
       setIsEvaluating(false);
     }
-  }, [isGameOver, toast, evaluationDisabled]);
+  }, [isGameOver, toast, evaluationDisabled, gameMode]);
   
   const triggerAiMove = useCallback(async (currentFen: string) => {
-    if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt) return;
+    if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt || gameMode === 'vs-player') return;
 
     setIsAiThinking(true);
     try {
@@ -171,19 +179,19 @@ export default function ChessGame() {
     } finally {
         setIsAiThinking(false);
     }
-  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, updateEvaluation, updateStatus]);
+  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, updateEvaluation, updateStatus, gameMode]);
 
   useEffect(() => {
     updateStatus();
-    if (game.turn() !== playerColor && !isGameOver && !isAiThinking && !evolutionPrompt) {
+    if (gameMode === 'vs-ai' && game.turn() !== playerColor && !isGameOver && !isAiThinking && !evolutionPrompt) {
       const timer = setTimeout(() => triggerAiMove(game.fen()), 500);
       return () => clearTimeout(timer);
     }
-  }, [game, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, updateStatus]);
+  }, [game, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, updateStatus, gameMode]);
 
 
   const handleMove = (from: Square, to: Square) => {
-    if (isGameOver || game.turn() !== playerColor || isAiThinking || evolutionPrompt) return;
+    if (isGameOver || !isPlayerTurn || isAiThinking || evolutionPrompt) return;
 
     const gameCopy = new Chess(game.fen());
     const moveResult = gameCopy.move({ from, to, promotion: 'q' });
@@ -196,7 +204,7 @@ export default function ChessGame() {
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
     
-    if (wasCapture && canEvolve) {
+    if (gameMode === 'vs-ai' && wasCapture && canEvolve) {
       playCaptureSound();
       setEvolutionPrompt({
         from,
@@ -215,6 +223,9 @@ export default function ChessGame() {
       }
       const newGame = new Chess(gameCopy.fen());
       setGame(newGame);
+       if (gameMode === 'vs-ai') {
+        updateEvaluation(newGame.fen());
+      }
     }
   };
 
@@ -240,7 +251,7 @@ export default function ChessGame() {
   };
 
   const handleNewGame = useCallback(() => {
-    const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
+    const newPlayerColor = gameMode === 'vs-ai' ? (Math.random() > 0.5 ? 'w' : 'b') : 'w';
     setPlayerColor(newPlayerColor);
     
     const newGame = new Chess();
@@ -253,10 +264,10 @@ export default function ChessGame() {
     setIsAiThinking(false);
     setShiningPiece(null);
     setEvaluation(0);
-    if (newPlayerColor === 'b') {
+    if (gameMode === 'vs-ai' && newPlayerColor === 'b') {
         updateEvaluation(newGame.fen());
     }
-  }, [updateEvaluation]);
+  }, [updateEvaluation, gameMode]);
 
   useEffect(() => {
     handleNewGame();
@@ -288,9 +299,11 @@ export default function ChessGame() {
               shiningPiece={shiningPiece}
               validMoves={validMoves}
               playerColor={playerColor}
+              isPlayerTurn={isPlayerTurn}
+              gameMode={gameMode}
             />
           </div>
-          <EvaluationBar evaluation={evaluation} isEvaluating={isEvaluating} isDisabled={evaluationDisabled} />
+          {gameMode === 'vs-ai' && <EvaluationBar evaluation={evaluation} isEvaluating={isEvaluating} isDisabled={evaluationDisabled} />}
         </div>
 
         <div className="flex flex-col gap-6">
@@ -302,26 +315,51 @@ export default function ChessGame() {
               <CardDescription>A magical twist on a classic game.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-               <div className="flex items-center justify-center gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
-                  <User /> You are playing as 
-                  <span className={cn("font-bold", playerColor === 'w' ? 'text-stone-50' : 'text-stone-900', 'drop-shadow-lg')}>{playerColor === 'w' ? 'White' : 'Black'}</span>
-              </div>
+               {gameMode === 'vs-ai' ? (
+                  <div className="flex items-center justify-center gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
+                    <User /> You are playing as 
+                    <span className={cn("font-bold", playerColor === 'w' ? 'text-stone-50' : 'text-stone-900', 'drop-shadow-lg')}>{playerColor === 'w' ? 'White' : 'Black'}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
+                    <Users /> Player vs. Player
+                  </div>
+                )}
               <div className="text-center font-semibold text-lg text-foreground/80 h-10 flex items-center justify-center p-2 rounded-md bg-secondary/50">
                 {isAiThinking ? <div className="flex items-center gap-2"><Loader /> AI is thinking...</div> : status}
               </div>
               <Button onClick={handleNewGame} variant="secondary" size="lg">New Game</Button>
-              <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || evolutionPrompt !== null || isGameOver}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select difficulty" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Easy">Easy</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="Hard">Hard</SelectItem>
-                  <SelectItem value="Expert">Expert</SelectItem>
-                  <SelectItem value="Grandmaster">Grandmaster</SelectItem>
-                </SelectContent>
-              </Select>
+              
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <Label htmlFor="game-mode">Game Mode</Label>
+                    <Select value={gameMode} onValueChange={(value: GameMode) => setGameMode(value)} disabled={isAiThinking || evolutionPrompt !== null || isGameOver}>
+                      <SelectTrigger id="game-mode">
+                        <SelectValue placeholder="Select mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="vs-ai">vs. AI</SelectItem>
+                        <SelectItem value="vs-player">vs. Player</SelectItem>
+                      </SelectContent>
+                    </Select>
+                 </div>
+                 <div>
+                  <Label htmlFor="difficulty">Difficulty</Label>
+                   <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || evolutionPrompt !== null || isGameOver || gameMode === 'vs-player'}>
+                    <SelectTrigger id="difficulty">
+                      <SelectValue placeholder="Select difficulty" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Easy">Easy</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="Hard">Hard</SelectItem>
+                      <SelectItem value="Expert">Expert</SelectItem>
+                      <SelectItem value="Grandmaster">Grandmaster</SelectItem>
+                    </SelectContent>
+                  </Select>
+                 </div>
+              </div>
+
                <div className="text-center mt-2 text-sm text-muted-foreground font-body">
                   {lastMove ? `Last Move: ${lastMove.from}-${lastMove.to}` : "Make your first move to begin."}
               </div>
@@ -360,7 +398,7 @@ export default function ChessGame() {
           status={gameOverInfo.status}
           onRematch={handleRematch}
           onIncreaseDifficulty={handleIncreaseDifficulty}
-          canIncreaseDifficulty={difficulties.indexOf(difficulty) < difficulties.length - 1}
+          canIncreaseDifficulty={difficulties.indexOf(difficulty) < difficulties.length - 1 && gameMode === 'vs-ai'}
         />
       )}
     </div>
@@ -388,4 +426,3 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
-

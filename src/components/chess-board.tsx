@@ -14,9 +14,11 @@ interface ChessBoardProps {
   shiningPiece: Square | null;
   validMoves: Move[];
   playerColor: Color;
+  isPlayerTurn: boolean;
+  gameMode: 'vs-ai' | 'vs-player';
 }
 
-export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece, validMoves, playerColor }: ChessBoardProps) {
+export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece, validMoves, playerColor, isPlayerTurn, gameMode }: ChessBoardProps) {
   const [fromSquare, setFromSquare] = useState<Square | null>(null);
 
   const handleSquareClick = (square: Square) => {
@@ -33,7 +35,7 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
       } else {
         setFromSquare(null);
       }
-    } else if (piece && piece.color === turn && turn === playerColor) {
+    } else if (piece && piece.color === turn && isPlayerTurn) {
       setFromSquare(square);
     }
   };
@@ -46,8 +48,10 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
 
   const possibleMovesForSelectedPiece = fromSquare ? validMoves.filter(m => m.from === fromSquare).map(m => m.to) : [];
 
-  const ranks = playerColor === 'w' ? [8, 7, 6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6, 7, 8];
-  const files = playerColor === 'w' ? ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] : ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
+  const effectivePlayerColor = gameMode === 'vs-player' ? 'w' : playerColor;
+
+  const ranks = effectivePlayerColor === 'w' ? [8, 7, 6, 5, 4, 3, 2, 1] : [1, 2, 3, 4, 5, 6, 7, 8];
+  const files = effectivePlayerColor === 'w' ? ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] : ['h', 'g', 'f', 'e', 'd', 'c', 'b', 'a'];
 
   return (
     <div className="w-full h-full">
@@ -74,7 +78,7 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
                 className={cn(
                   'flex justify-center items-center relative group h-full w-full',
                   isDark ? 'bg-primary/30' : 'bg-primary/10',
-                  turn === playerColor && getPieceAtSquare(square)?.color === playerColor && 'cursor-pointer',
+                  isPlayerTurn && getPieceAtSquare(square)?.color === turn && 'cursor-pointer',
                   'border border-primary/20'
                 )}
               >
