@@ -204,7 +204,7 @@ export default function ChessGame() {
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
     
-    if (gameMode === 'vs-ai' && wasCapture && canEvolve) {
+    if (wasCapture && canEvolve) {
       playCaptureSound();
       setEvolutionPrompt({
         from,
@@ -426,3 +426,5 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
+    
