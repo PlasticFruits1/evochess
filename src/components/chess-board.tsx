@@ -23,29 +23,25 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
     const piece = getPieceAtSquare(square);
 
     if (fromSquare) {
-      // Check if the move is valid by searching the validMoves array
       const isMoveValid = validMoves.some(m => m.from === fromSquare && m.to === square);
       
       if (isMoveValid) {
         onMove(fromSquare, square);
         setFromSquare(null);
       } else if (piece && piece.color === turn) {
-        // If the user clicks on another of their pieces, select it
         setFromSquare(square);
       } else {
-        // If the user clicks an empty square or an opponent's piece (not a valid move), deselect
         setFromSquare(null);
       }
-    } else if (piece && piece.color === turn) {
-      // If no piece is selected, and user clicks on their own piece, select it
+    } else if (piece && piece.color === turn && turn === playerColor) {
       setFromSquare(square);
     }
   };
 
   const getPieceAtSquare = (square: Square): Piece | null => {
-    const rank = playerColor === 'w' ? 8 - parseInt(square[1], 10) : parseInt(square[1], 10) - 1;
-    const file = playerColor === 'w' ? square.charCodeAt(0) - 'a'.charCodeAt(0) : 'h'.charCodeAt(0) - square.charCodeAt(0);
-    return board[rank]?.[file] || null;
+    const rankIndex = 8 - parseInt(square[1], 10);
+    const fileIndex = square.charCodeAt(0) - 'a'.charCodeAt(0);
+    return board[rankIndex]?.[fileIndex] || null;
   };
 
   const possibleMovesForSelectedPiece = fromSquare ? validMoves.filter(m => m.from === fromSquare).map(m => m.to) : [];
@@ -55,16 +51,16 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
 
   return (
     <div className="w-full h-full">
-      <div className={cn("grid grid-cols-8 grid-rows-8 aspect-square rounded-lg overflow-hidden shadow-2xl border-2 border-primary/20 bg-primary/10", playerColor === 'b' && "rotate-180")}>
+      <div className={cn("grid grid-cols-8 grid-rows-8 aspect-square rounded-lg overflow-hidden shadow-2xl border-2 border-primary/20 bg-primary/10")}>
         {ranks.flatMap(rank =>
           files.map(file => {
             const square = `${file}${rank}` as Square;
             const piece = getPieceAtSquare(square);
             
-            const row = playerColor === 'w' ? 8 - rank : rank - 1;
-            const col = playerColor === 'w' ? file.charCodeAt(0) - 'a'.charCodeAt(0) : 'h'.charCodeAt(0) - file.charCodeAt(0);
+            const rankIndex = 8 - rank;
+            const fileIndex = file.charCodeAt(0) - 'a'.charCodeAt(0);
 
-            const isDark = (row + col) % 2 !== 0;
+            const isDark = (rankIndex + fileIndex) % 2 !== 0;
 
             const isLastMoveSquare = lastMove && (square === lastMove.from || square === lastMove.to);
             const isSelectedSquare = fromSquare === square;
@@ -78,7 +74,7 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
                 className={cn(
                   'flex justify-center items-center relative group h-full w-full',
                   isDark ? 'bg-primary/30' : 'bg-primary/10',
-                  turn === getPieceAtSquare(square)?.color && 'cursor-pointer',
+                  turn === playerColor && getPieceAtSquare(square)?.color === playerColor && 'cursor-pointer',
                   'border border-primary/20'
                 )}
               >
