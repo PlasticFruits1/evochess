@@ -235,7 +235,7 @@ export default function ChessGame() {
   };
 
   return (
-    <div className="flex justify-center items-start gap-8 w-full max-w-7xl mx-auto p-4">
+    <div className="flex justify-center items-center gap-8 w-full max-w-7xl mx-auto p-4">
        <EvaluationBar evaluation={evaluation} isEvaluating={isEvaluating} />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full max-w-6xl">
         <div className="lg:col-span-2">
@@ -340,3 +340,4 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+

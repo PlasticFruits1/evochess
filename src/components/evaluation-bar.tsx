@@ -22,7 +22,7 @@ export function EvaluationBar({ evaluation, isEvaluating }: EvaluationBarProps) 
   const displayEval = (evaluation / 1).toFixed(1);
 
   return (
-    <div className="flex flex-col items-center h-full pt-12">
+    <div className="flex flex-col items-center h-full">
       <div className="relative w-8 h-[65vh] lg:h-[calc(100vh-12rem)] bg-stone-900 rounded-full overflow-hidden border-2 border-primary/20 flex flex-col">
         <div
           className="bg-stone-50 transition-all duration-500"
