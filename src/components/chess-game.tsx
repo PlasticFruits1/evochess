@@ -22,7 +22,7 @@ type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
   const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
-    p: 'b', b: 'n', n: 'r', r: 'q',
+    p: 'n', n: 'b', b: 'r', r: 'q',
   };
   return evolutionMap[piece.toLowerCase() as PieceSymbol] || null;
 };
@@ -122,7 +122,6 @@ export default function ChessGame() {
     const moveResult = gameCopy.move({ from, to, promotion: 'q' });
 
     if (!moveResult) {
-      // Don't toast here, as the UI should prevent invalid moves.
       return;
     }
 
@@ -170,7 +169,6 @@ export default function ChessGame() {
         setGame(new Chess(gameCopy.fen()));
       }
     }
-    // If not evolving, the game state is already correct from handleMove.
   };
 
   const handleNewGame = () => {
