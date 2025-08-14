@@ -29,7 +29,7 @@ interface BattleDialogProps {
   isLoading: boolean;
   onProceed: () => void;
   onRoll: () => void;
-  diceResult: { roll: number, remainingHp: number } | null;
+  diceResult: { attackerRoll: number, defenderRoll: number, damage: number, remainingHp: number } | null;
 }
 
 function pieceToUnicode(piece: PieceInfo) {
@@ -96,12 +96,23 @@ export function BattleDialog({ open, attacker, defender, dialogue, isLoading, on
         
         {diceResult && (
           <div className="text-center py-4 space-y-2">
-            <p className="text-2xl font-bold">You rolled a <span className="text-primary">{diceResult.roll}</span>!</p>
-            {diceResult.remainingHp > 0 ? (
-                <p>The defender survives with {diceResult.remainingHp} HP remaining.</p>
+            <div className="flex justify-around items-center text-xl font-bold">
+                <p>Attacker rolls: <span className="text-primary text-2xl">{diceResult.attackerRoll}</span></p>
+                <p>Defender rolls: <span className="text-primary text-2xl">{diceResult.defenderRoll}</span></p>
+            </div>
+            {diceResult.damage > 0 ? (
+                <>
+                  <p className="text-2xl font-bold">The defender takes <span className="text-destructive">{diceResult.damage}</span> damage!</p>
+                  {diceResult.remainingHp > 0 ? (
+                      <p>It survives with {diceResult.remainingHp} HP remaining.</p>
+                  ) : (
+                      <p>A fatal blow! The defender is vanquished.</p>
+                  )}
+                </>
             ) : (
-                <p>A fatal blow! The defender is vanquished.</p>
+                <p className="text-2xl font-bold">The attack is blocked! No damage taken.</p>
             )}
+
           </div>
         )}
 

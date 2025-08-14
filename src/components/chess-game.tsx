@@ -86,7 +86,7 @@ export default function ChessGame() {
   const [battlePrompt, setBattlePrompt] = useState<BattlePromptInfo | null>(null);
   const [battleDialogue, setBattleDialogue] = useState<{ attackerLine: string; defenderLine: string } | null>(null);
   const [recentlyUsedDialogue, setRecentlyUsedDialogue] = useState<Record<string, number[]>>({});
-  const [diceResult, setDiceResult] = useState<{ roll: number, remainingHp: number } | null>(null);
+  const [diceResult, setDiceResult] = useState<{ attackerRoll: number, defenderRoll: number, damage: number, remainingHp: number } | null>(null);
   const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null);
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
@@ -250,7 +250,7 @@ export default function ChessGame() {
             color: defenderPiece.color === 'w' ? 'White' : 'Black',
             type: pieceTypeMap[defenderPiece.type],
             hp: defenderHpState.hp,
-            maxHp: defenderHpState.maxHp,
+            maxHp: pieceHpConfig[defenderPiece.type] ?? 0,
         };
         
         const { dialogue, usedIndices } = getPieceDialogue(attacker.type, defender.type, recentlyUsedDialogue);
@@ -267,12 +267,15 @@ export default function ChessGame() {
   const handleRoll = () => {
       if (!battlePrompt) return;
       
-      const roll = Math.floor(Math.random() * 6) + 1;
+      const attackerRoll = Math.floor(Math.random() * 6) + 1;
+      const defenderRoll = Math.floor(Math.random() * 6) + 1;
+      const damage = Math.max(0, attackerRoll - defenderRoll);
+
       const defenderSquare = battlePrompt.move.to;
       const defenderCurrentHp = pieceHp[defenderSquare]?.hp ?? 0;
-      const remainingHp = defenderCurrentHp - roll;
+      const remainingHp = defenderCurrentHp - damage;
 
-      setDiceResult({ roll, remainingHp });
+      setDiceResult({ attackerRoll, defenderRoll, damage, remainingHp });
 
       if (remainingHp <= 0) {
         // Defender is vanquished
@@ -282,8 +285,10 @@ export default function ChessGame() {
       } else {
         // Defender survives
         const newHpMap = { ...pieceHp };
-        newHpMap[defenderSquare] = { ...newHpMap[defenderSquare]!, hp: remainingHp };
-        setPieceHp(newHpMap);
+        if (newHpMap[defenderSquare]) {
+            newHpMap[defenderSquare] = { ...newHpMap[defenderSquare]!, hp: remainingHp };
+            setPieceHp(newHpMap);
+        }
       }
   };
 
@@ -508,7 +513,7 @@ export default function ChessGame() {
             attacker={battlePrompt.attacker}
             defender={battlePrompt.defender}
             dialogue={battleDialogue ?? undefined}
-            isLoading={false}
+            isLoading={!battleDialogue}
             onRoll={handleRoll}
             onProceed={handleBattleProceed}
             diceResult={diceResult}
