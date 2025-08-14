@@ -77,11 +77,15 @@ const capturedPieces = (game: Chess, color: Color) => {
     return captured;
 };
 
-export default function ChessGame() {
+interface ChessGameProps {
+  initialGameMode: GameMode;
+}
+
+export default function ChessGame({ initialGameMode }: ChessGameProps) {
   useTone(); // Initialize audio context on user interaction
   const [game, setGame] = useState(new Chess());
   const [pieceHp, setPieceHp] = useState<PieceHpMap>({});
-  const [gameMode, setGameMode] = useState<GameMode>('vs-ai');
+  const [gameMode, setGameMode] = useState<GameMode>(initialGameMode);
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [playerColor, setPlayerColor] = useState<Color>('w');
   const [isAiThinking, setIsAiThinking] = useState(false);
@@ -440,6 +444,7 @@ export default function ChessGame() {
     setGame(newGame);
     
     if (gameMode === 'vs-ai') {
+      // Player color alternates in vs-ai mode on new game for variety
       const newPlayerColor = playerColor === 'w' ? 'b' : 'w';
       setPlayerColor(newPlayerColor);
     } else {
@@ -585,37 +590,26 @@ export default function ChessGame() {
               <div className="text-center font-semibold text-lg text-foreground/80 h-10 flex items-center justify-center p-2 rounded-md bg-secondary/50">
                 {isAiThinking ? <div className="flex items-center gap-2"><Loader /> AI is thinking...</div> : status}
               </div>
-              <Button onClick={handleNewGame} variant="secondary" size="lg">New Game / Change Mode</Button>
               
-              <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <Label htmlFor="game-mode">Game Mode</Label>
-                    <Select value={gameMode} onValueChange={(value: GameMode) => setGameMode(value)} disabled={isAiThinking || evolutionPrompt !== null || isGameOver || !!battlePrompt}>
-                      <SelectTrigger id="game-mode">
-                        <SelectValue placeholder="Select mode" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="vs-ai">vs. AI</SelectItem>
-                        <SelectItem value="vs-player">vs. Player</SelectItem>
-                        <SelectItem value="story">Story Mode</SelectItem>
-                      </SelectContent>
+              <div className="grid grid-cols-1 gap-4">
+                 <Button onClick={() => window.location.reload()} variant="secondary" size="lg">Change Mode</Button>
+                 {gameMode === 'vs-ai' && (
+                    <>
+                    <Label htmlFor="difficulty">AI Difficulty</Label>
+                    <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || evolutionPrompt !== null || isGameOver || !!battlePrompt}>
+                        <SelectTrigger id="difficulty">
+                        <SelectValue placeholder="Select difficulty" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        <SelectItem value="Easy">Easy</SelectItem>
+                        <SelectItem value="Medium">Medium</SelectItem>
+                        <SelectItem value="Hard">Hard</SelectItem>
+                        <SelectItem value="Expert">Expert</SelectItem>
+                        <SelectItem value="Grandmaster">Grandmaster</SelectItem>
+                        </SelectContent>
                     </Select>
-                 </div>
-                 <div>
-                  <Label htmlFor="difficulty">Difficulty</Label>
-                   <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || evolutionPrompt !== null || isGameOver || gameMode !== 'vs-ai' || !!battlePrompt}>
-                    <SelectTrigger id="difficulty">
-                      <SelectValue placeholder="Select difficulty" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Easy">Easy</SelectItem>
-                      <SelectItem value="Medium">Medium</SelectItem>
-                      <SelectItem value="Hard">Hard</SelectItem>
-                      <SelectItem value="Expert">Expert</SelectItem>
-                      <SelectItem value="Grandmaster">Grandmaster</SelectItem>
-                    </SelectContent>
-                  </Select>
-                 </div>
+                    </>
+                 )}
               </div>
 
                <div className="text-center mt-2 text-sm text-muted-foreground font-body">
