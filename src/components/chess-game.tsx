@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
-import type { PieceSymbol, Color } from 'chess.js';
+import type { PieceSymbol, Color, Move as ChessMove, Square } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
 import { evaluateBoard } from '@/ai/flows/evaluate-board';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
@@ -17,7 +17,7 @@ import { GameOverDialog } from '@/components/game-over-dialog';
 import { Loader } from '@/components/ui/loader';
 import { Crown, Swords, User, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { type Move, type Square } from '@/lib/types';
+import { type Move } from '@/lib/types';
 import { EvaluationBar } from '@/components/evaluation-bar';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
@@ -147,12 +147,18 @@ export default function ChessGame() {
     const moves = game.moves();
     if (moves.length > 0) {
       const randomMove = moves[Math.floor(Math.random() * moves.length)];
-      const newGame = new Chess(game.fen());
-      newGame.move(randomMove);
-      setGame(new Chess(newGame.fen()));
-      setLastMove(null); // Or set to the random move
+      const gameCopy = new Chess(game.fen());
+      gameCopy.move(randomMove);
+      const newGame = new Chess(gameCopy.fen());
+      setGame(newGame);
+      // In a real game, you would need to get the 'from' and 'to' from the move object
+      // For simplicity here, we're not setting lastMove for random moves
+      setLastMove(null);
+      if (game.turn() !== playerColor) {
+        updateEvaluation(newGame.fen());
+      }
     }
-  }, [game]);
+  }, [game, playerColor, updateEvaluation]);
 
   const triggerAiMove = useCallback(async (currentFen: string) => {
     if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt || gameMode === 'vs-player') return;
@@ -162,11 +168,17 @@ export default function ChessGame() {
       const response = await generateChessMove({ boardState: currentFen, difficulty });
       
       const gameCopy = new Chess(currentFen);
-      const move = gameCopy.move(response.move);
-
-      if (move) {
-        setLastMove({ from: move.from, to: move.to });
-        if (move.captured) {
+      const legalMoves = gameCopy.moves({verbose: true});
+      const isMoveLegal = legalMoves.some(m => m.from + m.to === response.move || m.from + m.to + (m.promotion || '') === response.move);
+      
+      let moveResult: ChessMove | null = null;
+      if (isMoveLegal) {
+        moveResult = gameCopy.move(response.move);
+      }
+      
+      if (moveResult) {
+        setLastMove({ from: moveResult.from, to: moveResult.to });
+        if (moveResult.captured) {
             playCaptureSound();
         } else {
             playMoveSound();
@@ -238,7 +250,8 @@ export default function ChessGame() {
       }
       const newGame = new Chess(gameCopy.fen());
       setGame(newGame);
-      if (gameMode === 'vs-ai' && game.turn() !== playerColor) {
+      if (gameMode === 'vs-ai' && game.turn() === playerColor) {
+        // Human made a move, now it's AI's turn, so update eval for human's move
         updateEvaluation(newGame.fen());
       }
     }
@@ -260,13 +273,14 @@ export default function ChessGame() {
         setTimeout(() => setShiningPiece(null), 2000); // Shine duration
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
-         if (gameMode === 'vs-ai' && game.turn() !== playerColor) {
-           updateEvaluation(newGame.fen());
+        if (gameMode === 'vs-ai' && game.turn() === playerColor) {
+          updateEvaluation(newGame.fen());
         }
       }
     } else {
-      if (gameMode === 'vs-ai' && game.turn() !== playerColor) {
-        updateEvaluation(game.fen());
+      // If player chooses not to evolve, we still need to potentially trigger AI move or eval
+      if (gameMode === 'vs-ai' && game.turn() === playerColor) {
+         updateEvaluation(game.fen());
       }
     }
     setEvolutionPrompt(null);
@@ -280,6 +294,8 @@ export default function ChessGame() {
       const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
       setPlayerColor(newPlayerColor);
       if (newPlayerColor === 'b') {
+        // If AI is white, it should make the first move.
+        // We also run an initial evaluation.
         updateEvaluation(newGame.fen());
       }
     } else {
@@ -430,5 +446,3 @@ export default function ChessGame() {
     </div>
   );
 }
-
-    
