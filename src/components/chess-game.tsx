@@ -257,7 +257,8 @@ export default function ChessGame() {
       const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
       setPlayerColor(newPlayerColor);
       if (newPlayerColor === 'b') {
-        const timer = setTimeout(() => triggerAiMove(newGame.fen()), 500);
+        const fen = newGame.fen();
+        const timer = setTimeout(() => triggerAiMove(fen), 500);
         return () => clearTimeout(timer);
       }
     } else {
