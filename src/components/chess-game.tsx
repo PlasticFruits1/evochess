@@ -75,7 +75,7 @@ export default function ChessGame() {
     return game.turn() === playerColor;
   }, [game, gameMode, playerColor]);
 
-  const handleEvaluation = useCallback(async (currentFen: string) => {
+  const handleEvaluation = async (currentFen: string) => {
     if (isEvaluating || evaluationDisabled || gameMode !== 'vs-ai') return;
     setIsEvaluating(true);
     try {
@@ -92,17 +92,17 @@ export default function ChessGame() {
       } else {
         console.error("Evaluation failed:", error);
       }
-      // Keep the last known evaluation on error
     } finally {
       setIsEvaluating(false);
     }
-  }, [isEvaluating, evaluationDisabled, toast, gameMode]);
+  };
 
    useEffect(() => {
     if (gameMode === 'vs-ai' && !isGameOver) {
       handleEvaluation(fen);
     }
-  }, [fen, gameMode, isGameOver, handleEvaluation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fen, gameMode, isGameOver]);
   
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -182,7 +182,7 @@ export default function ChessGame() {
     } finally {
         setIsAiThinking(false);
     }
-  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, gameMode, playRandomMove, handleEvaluation, isAiThinking]);
+  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, gameMode, playRandomMove, isAiThinking]);
 
   useEffect(() => {
     updateStatus();
@@ -437,5 +437,3 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
-
-    
