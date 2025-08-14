@@ -19,11 +19,12 @@ import { BattleDialog } from '@/components/battle-dialog';
 import { CheckDialog } from '@/components/check-dialog';
 import { PuzzleDialog } from '@/components/puzzle-dialog';
 import { Loader } from '@/components/ui/loader';
-import { Crown, Swords, User, Users, BookOpen } from 'lucide-react';
+import { Crown, Swords, User, Users, BookOpen, Heart, Lightbulb } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { type Move, type Square, type Piece } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
+import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
 type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color: Color, captured: PieceSymbol | undefined };
@@ -96,6 +97,9 @@ export default function ChessGame() {
   const [checkInfo, setCheckInfo] = useState<{ show: boolean, isCheckmate: boolean }>({ show: false, isCheckmate: false });
   const [currentLevel, setCurrentLevel] = useState(0);
   const [puzzleState, setPuzzleState] = useState<{ showDialog: boolean; level: StoryLevel | null }>({ showDialog: false, level: null });
+  const [lives, setLives] = useState(3);
+  const [currentSolutionNode, setCurrentSolutionNode] = useState<any>(null);
+  const [showPuzzleFailure, setShowPuzzleFailure] = useState(false);
   const { toast } = useToast();
 
   const fen = game.fen();
@@ -108,7 +112,8 @@ export default function ChessGame() {
     return game.turn() === playerColor;
   }, [game, gameMode, playerColor, currentLevel]);
 
-  const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
+
+   const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
     if (gameMode !== 'story') return;
     const level = storyLevels[currentLevel];
     if (!level) return;
@@ -261,10 +266,8 @@ export default function ChessGame() {
     if (wasCapture && canEvolve) {
         playCaptureSound();
         if (isAiMove) {
-            // AI always evolves
             const newGame = new Chess(gameCopy.fen());
             setGame(newGame);
-            // Apply evolution after a short delay for effect
             setTimeout(() => applyEvolution(to, moveResult.piece, moveResult.color), 500);
         } else {
              setEvolutionPrompt({
@@ -290,8 +293,51 @@ export default function ChessGame() {
     }
   };
 
+  const handleStoryMove = (from: Square, to: Square) => {
+    const moveString = `${from}${to}`;
+    const nextStep = currentSolutionNode?.[moveString];
+
+    if (nextStep) {
+        // Correct move
+        executeMove(from, to);
+        if (typeof nextStep === 'string') {
+            if (nextStep === 'win') {
+                // Player's move wins, check completion will handle it
+            } else {
+                // Opponent's turn
+                setTimeout(() => {
+                    executeMove(nextStep.slice(0, 2) as Square, nextStep.slice(2, 4) as Square);
+                    setCurrentSolutionNode(null); // Reset for next player move
+                }, 500);
+            }
+        } else {
+            // There are more steps in the solution
+            setCurrentSolutionNode(nextStep);
+        }
+    } else {
+        // Incorrect move
+        const newLives = lives - 1;
+        setLives(newLives);
+        if (newLives <= 0) {
+            setShowPuzzleFailure(true);
+        } else {
+            toast({
+                title: "Incorrect Move!",
+                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
+                variant: "destructive"
+            });
+        }
+    }
+  };
+
+
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || isAiThinking || evolutionPrompt || battlePrompt) return;
+    
+    if (gameMode === 'story') {
+        handleStoryMove(from, to);
+        return;
+    }
 
     const gameCopy = new Chess(game.fen());
     const move = gameCopy.moves({verbose: true}).find(m => m.from === from && m.to === to)
@@ -346,12 +392,10 @@ export default function ChessGame() {
       setDiceResult({ attackerRoll, defenderRoll, damage, remainingHp });
 
       if (remainingHp <= 0) {
-        // Defender is vanquished
         const newHpMap = { ...pieceHp };
         delete newHpMap[defenderSquare];
         setPieceHp(newHpMap);
       } else {
-        // Defender survives
         const newHpMap = { ...pieceHp };
         if (newHpMap[defenderSquare]) {
             newHpMap[defenderSquare] = { ...newHpMap[defenderSquare]!, hp: remainingHp };
@@ -364,18 +408,11 @@ export default function ChessGame() {
       if (!battlePrompt || !diceResult) return;
       
       if (diceResult.remainingHp <= 0) {
-        // Defender was defeated, so attacker moves
         executeMove(battlePrompt.move.from, battlePrompt.move.to);
       } else {
-        // Defender survived, attacker does not move
-        // We still need to advance the turn. A null move is not supported by chess.js
-        // So we just toggle the turn in a copy of the game state.
         const gameCopy = new Chess(game.fen());
-        const turn = gameCopy.turn();
-        // This is a bit of a hack. We load the FEN, which clears the history,
-        // so we can't just flip the turn. We can, however, load a new FEN where the turn is flipped.
         const tokens = gameCopy.fen().split(" ");
-        tokens[1] = turn === "w" ? "b" : "w";
+        tokens[1] = game.turn() === "w" ? "b" : "w";
         gameCopy.load(tokens.join(" "));
         setGame(gameCopy);
         playMoveSound();
@@ -403,7 +440,7 @@ export default function ChessGame() {
     setGame(newGame);
     
     if (gameMode === 'vs-ai') {
-      const newPlayerColor = playerColor === 'w' ? 'b' : 'w'; // Switch colors on new game
+      const newPlayerColor = playerColor === 'w' ? 'b' : 'w';
       setPlayerColor(newPlayerColor);
     } else {
       setPlayerColor('w');
@@ -435,6 +472,7 @@ export default function ChessGame() {
     setCheckInfo({ show: false, isCheckmate: false });
     setCurrentLevel(0);
     setPuzzleState({ showDialog: false, level: null });
+    setShowPuzzleFailure(false);
 
     if (gameMode === 'story') {
         const firstLevel = storyLevels[0];
@@ -444,11 +482,14 @@ export default function ChessGame() {
   }, [gameMode, playerColor]);
 
   const startPuzzle = () => {
-    if (!puzzleState.level) return;
-    const game = new Chess(puzzleState.level.fen);
-    setGame(game);
-    setPieceHp(puzzleState.level.hpMap ?? {});
-    setPlayerColor(puzzleState.level.playerColor);
+    const level = storyLevels[currentLevel];
+    if (!level) return;
+    const newGame = new Chess(level.fen);
+    setGame(newGame);
+    setPieceHp(level.hpMap ?? {});
+    setPlayerColor(level.playerColor);
+    setLives(level.lives);
+    setCurrentSolutionNode(level.solution);
     setPuzzleState({ showDialog: false, level: null });
   };
 
@@ -468,6 +509,23 @@ export default function ChessGame() {
     }
     handleNewGame();
   };
+
+  const showHint = () => {
+    if (gameMode !== 'story') return;
+    const level = storyLevels[currentLevel];
+    if (level) {
+        toast({
+            title: "Hint",
+            description: level.hint,
+        });
+    }
+  };
+
+  const restartPuzzle = () => {
+    setShowPuzzleFailure(false);
+    startPuzzle();
+  }
+
 
   return (
     <div className="flex justify-center items-center gap-8 w-full max-w-7xl mx-auto p-4">
@@ -510,9 +568,18 @@ export default function ChessGame() {
                   </div>
                 )}
                  {gameMode === 'story' && (
-                  <div className="flex items-center justify-center gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
-                    <BookOpen /> Story Mode
-                  </div>
+                    <div className="flex flex-col gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
+                        <div className="flex items-center justify-center gap-2">
+                           <BookOpen /> Story Mode
+                        </div>
+                        <div className="flex justify-around items-center text-base">
+                            <div className="flex items-center gap-2">
+                                <Heart className="text-destructive" />
+                                <span>Lives: {lives}</span>
+                            </div>
+                            <Button size="sm" variant="outline" onClick={showHint}><Lightbulb className="mr-2" /> Hint</Button>
+                        </div>
+                    </div>
                 )}
 
               <div className="text-center font-semibold text-lg text-foreground/80 h-10 flex items-center justify-center p-2 rounded-md bg-secondary/50">
@@ -604,6 +671,22 @@ export default function ChessGame() {
             onStart={startPuzzle}
         />
       )}
+
+       {showPuzzleFailure && (
+            <AlertDialog open={showPuzzleFailure}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Challenge Failed</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            You've run out of lives for this challenge. Would you like to try again?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={restartPuzzle}>Restart Challenge</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        )}
 
       {checkInfo.show && (
         <CheckDialog

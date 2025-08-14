@@ -4,6 +4,10 @@ import type { PieceSymbol, Color, Square } from './types';
 
 type PieceHpMap = { [key in Square]?: { hp: number; maxHp: number; } };
 
+// A solution can be a direct opponent response (string) or another nested object of moves.
+// 'win' signifies the player's move solves the puzzle.
+type SolutionBranch = { [move: string]: SolutionBranch | string; };
+
 export interface StoryLevel {
   title: string;
   narrative: string;
@@ -11,6 +15,9 @@ export interface StoryLevel {
   fen: string;
   playerColor: Color;
   hpMap?: PieceHpMap;
+  lives: number;
+  hint: string;
+  solution: SolutionBranch;
   winCondition: (game: Chess) => boolean;
 }
 
@@ -43,8 +50,15 @@ export const storyLevels: StoryLevel[] = [
     fen: "k7/8/8/8/4p3/8/3P4/K7 w - - 0 1",
     playerColor: 'w',
     hpMap: createHpMapFromFen("k7/8/8/8/4p3/8/3P4/K7 w - - 0 1"),
+    lives: 3,
+    hint: "Pawns capture diagonally. Move your pawn to capture the opponent.",
+    solution: {
+      'd2e3': 'e4d3', // Wrong move, opponent captures
+      'd2d3': 'e4d3', // Wrong move
+      'd2d4': 'e4d3', // Wrong move
+      'd2xe3': 'win' // Correct move
+    },
     winCondition: (game) => {
-        // Win condition is met if a white knight is on the board (the result of evolution).
         const board = game.board();
         return board.flat().some(p => p?.type === 'n' && p.color === 'w');
     }
@@ -52,27 +66,41 @@ export const storyLevels: StoryLevel[] = [
   // Level 2: The Fork in the Road
   {
     title: "The Fork in the Road",
-    narrative: "Having become a Knight, you journey forth. You come across two enemy rooks blocking your path. 'True strength is not about brute force,' a mysterious voice echoes, 'but about seeing the paths others cannot.'",
-    objective: "Win a rook.",
-    fen: "r3k3/8/8/8/4N3/8/8/R3K3 w - - 0 1",
+    narrative: "Having become a Knight, you journey forth. You come across two enemy rooks guarding a pass. 'True strength is not about brute force,' a mysterious voice echoes, 'but about seeing the paths others cannot.'",
+    objective: "Win a rook by using a fork.",
+    fen: "r3k2r/8/8/8/4N3/8/8/4K3 w - - 0 1",
     playerColor: 'w',
-    hpMap: createHpMapFromFen("r3k3/8/8/8/4N3/8/8/R3K3 w - - 0 1"),
+    hpMap: createHpMapFromFen("r3k2r/8/8/8/4N3/8/8/4K3 w - - 0 1"),
+    lives: 2,
+    hint: "A knight can attack multiple pieces at once. Find a square where your knight attacks both the king and a rook.",
+    solution: {
+        'e4f6': 'e8f7', // This is the check, forcing the king to move.
+        'e4g5': 'e8e7',
+        'e4d6': 'e8e7'
+    },
     winCondition: (game) => {
-        // Win if there is only one or zero black rooks left.
         const board = game.board();
         const blackRooks = board.flat().filter(p => p?.type === 'r' && p.color === 'b').length;
-        return blackRooks <= 1;
+        // After the fork, the player should be able to capture a rook.
+        return blackRooks <= 1 && game.history().length > 2;
     }
   },
-  // Level 3: The Bishop's Gambit
+  // Level 3: Scholar's Mate
   {
-    title: "The Bishop's Gambit",
-    narrative: "You've proven your cunning. Now you face a true test of faith and power. A fanatical Bishop guards a narrow pass. 'Only the truly enlightened may pass!' he declares, his eyes glowing with power. His queen stands behind him, a menacing shadow.",
-    objective: "Checkmate the Black King.",
-    fen: "r1b1k2r/pppp1ppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 1",
-    playerColor: 'w',
-    hpMap: createHpMapFromFen("r1b1k2r/pppp1ppp/2n2n2/2b1p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 0 1"),
-    winCondition: (game) => game.isCheckmate(),
+      title: "The Scholar's Gambit",
+      narrative: "You've proven your cunning. Now you face a true test of strategy. 'The quickest victory is the most decisive,' whispers a cloaked figure. 'End this swiftly.'",
+      objective: "Deliver checkmate in 2 moves.",
+      fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 3",
+      playerColor: 'w',
+      hpMap: createHpMapFromFen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 3"),
+      lives: 1,
+      hint: "Your Queen is your most powerful piece. Where can she strike the weakest point?",
+      solution: {
+          'd1f3': { // Player's first move
+              'a7a6': 'f3f7' // Opponent's scripted response, then player's winning move
+          },
+          'c4xf7': 'win' // Alternative immediate win
+      },
+      winCondition: (game) => game.isCheckmate(),
   },
-  // ... more levels to come
 ];
