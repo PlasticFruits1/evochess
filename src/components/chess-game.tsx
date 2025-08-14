@@ -236,21 +236,21 @@ export default function ChessGame() {
 
         if (!attackerPiece || !defenderPiece) return;
 
-        const attackerHp = pieceHp[move.from] ?? { hp: 0, maxHp: 0};
-        const defenderHp = pieceHp[move.to] ?? { hp: 0, maxHp: 0};
+        const attackerHpState = pieceHp[move.from] ?? { hp: pieceHpConfig[attackerPiece.type] ?? 0, maxHp: pieceHpConfig[attackerPiece.type] ?? 0 };
+        const defenderHpState = pieceHp[move.to] ?? { hp: pieceHpConfig[defenderPiece.type] ?? 0, maxHp: pieceHpConfig[defenderPiece.type] ?? 0 };
 
         const attacker: PieceInfo = {
             color: move.color === 'w' ? 'White' : 'Black',
             type: pieceTypeMap[move.piece],
-            hp: attackerHp.hp,
-            maxHp: attackerHp.maxHp,
+            hp: attackerHpState.hp,
+            maxHp: attackerHpState.maxHp,
         };
 
         const defender: PieceInfo = {
             color: defenderPiece.color === 'w' ? 'White' : 'Black',
             type: pieceTypeMap[defenderPiece.type],
-            hp: defenderHp.hp,
-            maxHp: defenderHp.maxHp
+            hp: defenderHpState.hp,
+            maxHp: defenderHpState.maxHp,
         };
         
         const { dialogue, usedIndices } = getPieceDialogue(attacker.type, defender.type, recentlyUsedDialogue);
