@@ -17,7 +17,6 @@ import { Loader } from '@/components/ui/loader';
 import { Crown, Swords, User, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { type Move, type Square } from '@/lib/types';
-import { EvaluationBar } from '@/components/evaluation-bar';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 
@@ -47,37 +46,6 @@ const capturedPieces = (game: Chess, color: Color) => {
     return captured;
 };
 
-const pieceValues: { [key in PieceSymbol]: number } = {
-  p: 1,
-  n: 3,
-  b: 3,
-  r: 5,
-  q: 9,
-  k: 0,
-};
-
-const calculateMaterialAdvantage = (game: Chess): number => {
-  let whiteScore = 0;
-  let blackScore = 0;
-  
-  game.board().forEach(row => {
-    row.forEach(square => {
-      if (square) {
-        const value = pieceValues[square.type];
-        if (square.color === 'w') {
-          whiteScore += value;
-        } else {
-          blackScore += value;
-        }
-      }
-    });
-  });
-
-  const evaluation = whiteScore - blackScore;
-  // Clamp evaluation for display purposes, e.g., max advantage of a queen + minor piece
-  return Math.max(-12, Math.min(12, evaluation));
-};
-
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
   const [game, setGame] = useState(new Chess());
@@ -90,7 +58,6 @@ export default function ChessGame() {
   const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null);
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
-  const [evaluation, setEvaluation] = useState(0);
   const { toast } = useToast();
   
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
@@ -121,7 +88,6 @@ export default function ChessGame() {
       playCheckSound();
     }
     setStatus(newStatus);
-    setEvaluation(calculateMaterialAdvantage(game));
   }, [game, isGameOver]);
 
   const playRandomMove = useCallback(() => {
@@ -251,7 +217,6 @@ export default function ChessGame() {
   const handleNewGame = useCallback(() => {
     const newGame = new Chess();
     setGame(newGame);
-    setEvaluation(calculateMaterialAdvantage(newGame));
     
     if (gameMode === 'vs-ai') {
       const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
@@ -293,7 +258,7 @@ export default function ChessGame() {
   return (
     <div className="flex justify-center items-center gap-8 w-full max-w-7xl mx-auto p-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
-        <div className="lg:col-span-2 flex justify-center items-start gap-4">
+        <div className="lg:col-span-2 flex justify-center items-start">
           <div className="w-full max-w-[65vh] lg:max-w-[calc(100vh-12rem)]">
             <ChessBoard
               board={game.board()}
@@ -307,7 +272,6 @@ export default function ChessGame() {
               gameMode={gameMode}
             />
           </div>
-          {gameMode === 'vs-ai' && <EvaluationBar evaluation={evaluation} />}
         </div>
 
         <div className="flex flex-col gap-6">
