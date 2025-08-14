@@ -96,6 +96,12 @@ export default function ChessGame() {
       setIsEvaluating(false);
     }
   }, [isEvaluating, evaluationDisabled, toast, gameMode]);
+
+   useEffect(() => {
+    if (gameMode === 'vs-ai' && !isGameOver) {
+      handleEvaluation(game.fen());
+    }
+  }, [game, gameMode]);
   
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -120,14 +126,14 @@ export default function ChessGame() {
   }, [game, isGameOver]);
 
   const playRandomMove = useCallback(() => {
-    const moves = game.moves();
+    const moves = game.moves({verbose: true});
     if (moves.length > 0) {
       const randomMove = moves[Math.floor(Math.random() * moves.length)];
       const gameCopy = new Chess(game.fen());
       gameCopy.move(randomMove);
       const newGame = new Chess(gameCopy.fen());
       setGame(newGame);
-      setLastMove(null);
+      setLastMove({ from: randomMove.from, to: randomMove.to });
     }
   }, [game]);
 
@@ -156,7 +162,6 @@ export default function ChessGame() {
         }
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
-        handleEvaluation(newGame.fen());
       } else {
          toast({
             title: "AI Error",
@@ -247,12 +252,10 @@ export default function ChessGame() {
   const handleNewGame = useCallback(() => {
     const newGame = new Chess();
     setGame(newGame);
-    setEvaluation({ evaluation: 0, reason: "The position is balanced." });
     
     if (gameMode === 'vs-ai') {
       const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
       setPlayerColor(newPlayerColor);
-      handleEvaluation(newGame.fen());
       if (newPlayerColor === 'b') {
         const fen = newGame.fen();
         const timer = setTimeout(() => triggerAiMove(fen), 500);
@@ -268,7 +271,7 @@ export default function ChessGame() {
     setGameOverInfo(null);
     setIsAiThinking(false);
     setShiningPiece(null);
-  }, [gameMode, triggerAiMove, handleEvaluation]);
+  }, [gameMode, triggerAiMove]);
 
   useEffect(() => {
     handleNewGame();
