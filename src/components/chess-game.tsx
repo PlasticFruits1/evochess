@@ -127,7 +127,7 @@ export default function ChessGame() {
       if (error.message?.includes("429")) {
          toast({
             title: "Evaluation Limit Reached",
-            description: "You've exceeded the daily quota for the evaluation API. This feature will be disabled for now.",
+            description: "You've exceeded the API quota for the evaluation feature. It has been disabled for now.",
             variant: "destructive",
         });
         setEvaluationDisabled(true);
@@ -154,11 +154,9 @@ export default function ChessGame() {
       // In a real game, you would need to get the 'from' and 'to' from the move object
       // For simplicity here, we're not setting lastMove for random moves
       setLastMove(null);
-      if (game.turn() !== playerColor) {
-        updateEvaluation(newGame.fen());
-      }
+      updateEvaluation(newGame.fen());
     }
-  }, [game, playerColor, updateEvaluation]);
+  }, [game, updateEvaluation]);
 
   const triggerAiMove = useCallback(async (currentFen: string) => {
     if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt || gameMode === 'vs-player') return;
@@ -250,10 +248,6 @@ export default function ChessGame() {
       }
       const newGame = new Chess(gameCopy.fen());
       setGame(newGame);
-      if (gameMode === 'vs-ai' && game.turn() === playerColor) {
-        // Human made a move, now it's AI's turn, so update eval for human's move
-        updateEvaluation(newGame.fen());
-      }
     }
   };
 
@@ -273,14 +267,6 @@ export default function ChessGame() {
         setTimeout(() => setShiningPiece(null), 2000); // Shine duration
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
-        if (gameMode === 'vs-ai' && game.turn() === playerColor) {
-          updateEvaluation(newGame.fen());
-        }
-      }
-    } else {
-      // If player chooses not to evolve, we still need to potentially trigger AI move or eval
-      if (gameMode === 'vs-ai' && game.turn() === playerColor) {
-         updateEvaluation(game.fen());
       }
     }
     setEvolutionPrompt(null);
