@@ -178,7 +178,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       const randomMove = moves[Math.floor(Math.random() * moves.length)];
       handleMove(randomMove.from, randomMove.to);
     }
-  }, [game]);
+  }, [game, handleMove]);
 
   const triggerAiMove = useCallback(async (currentFen: string) => {
     if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt || battlePrompt || gameMode !== 'vs-ai') return;
@@ -212,7 +212,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     } finally {
         setIsAiThinking(false);
     }
-  }, [difficulty, playerColor, isGameOver, toast, evolutionPrompt, battlePrompt, gameMode, playRandomMove, isAiThinking, game]);
+  }, [difficulty, playerColor, isGameOver, toast, evolutionPrompt, battlePrompt, gameMode, playRandomMove, isAiThinking, game, handleMove]);
 
 
   useEffect(() => {
@@ -305,13 +305,11 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         // Correct move
         executeMove(from, to);
         if (typeof nextStep === 'string') {
-            if (nextStep === 'win') {
-                // Player's move wins, check completion will handle it
-            } else {
-                // Opponent's turn
+            if (nextStep !== 'win') {
+                 // Opponent's turn
                 setTimeout(() => {
                     executeMove(nextStep.slice(0, 2) as Square, nextStep.slice(2, 4) as Square);
-                    setCurrentSolutionNode(null); // Reset for next player move
+                    setCurrentSolutionNode(null); // Player needs to find the next move from the root
                 }, 500);
             }
         } else {
@@ -335,7 +333,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
   };
 
 
-  const handleMove = (from: Square, to: Square) => {
+  const handleMove = useCallback((from: Square, to: Square) => {
     if (isGameOver || isAiThinking || evolutionPrompt || battlePrompt) return;
     
     if (gameMode === 'story') {
@@ -379,7 +377,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     } else {
         executeMove(from, to);
     }
-  };
+  }, [game, isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, handleStoryMove, pieceHp, recentlyUsedDialogue]);
 
 
   const handleRoll = () => {
@@ -500,7 +498,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
 
   useEffect(() => {
     handleNewGame();
-  }, [gameMode]);
+  }, [gameMode, handleNewGame]);
 
 
   const handleRematch = () => {
@@ -723,3 +721,5 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
+    

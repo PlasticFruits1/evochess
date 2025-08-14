@@ -47,9 +47,9 @@ export const storyLevels: StoryLevel[] = [
     title: "The First Step",
     narrative: "Your quest begins in the quiet village of White-haven. A lone pawn, you dream of glory. A grizzled old knight offers you your first challenge. 'The path to greatness is paved with sacrifice,' he says. 'Show me you understand.'",
     objective: "Capture the black pawn to evolve.",
-    fen: "8/8/8/8/3p4/4P3/8/k1K5 w - - 0 1",
+    fen: "k7/8/8/8/3p4/4P3/8/K7 w - - 0 1",
     playerColor: 'w',
-    hpMap: createHpMapFromFen("8/8/8/8/3p4/4P3/8/k1K5 w - - 0 1"),
+    hpMap: createHpMapFromFen("k7/8/8/8/3p4/4P3/8/K7 w - - 0 1"),
     lives: 3,
     hint: "Pawns capture diagonally. Move your pawn to capture the opponent.",
     solution: {
@@ -65,23 +65,19 @@ export const storyLevels: StoryLevel[] = [
     title: "The Fork in the Road",
     narrative: "Having become a Knight, you journey forth. You come across two enemy rooks guarding a pass. 'True strength is not about brute force,' a mysterious voice echoes, 'but about seeing the paths others cannot.'",
     objective: "Win a rook by using a fork.",
-    fen: "r3k2r/8/8/8/4N3/8/8/4K3 w KQkq - 0 1",
+    fen: "r3k2r/8/8/8/8/4N3/8/4K3 w KQkq - 0 1",
     playerColor: 'w',
-    hpMap: createHpMapFromFen("r3k2r/8/8/8/4N3/8/8/4K3 w KQkq - 0 1"),
+    hpMap: createHpMapFromFen("r3k2r/8/8/8/8/4N3/8/4K3 w KQkq - 0 1"),
     lives: 2,
     hint: "A knight can attack multiple pieces at once. Find a square where your knight attacks both the king and a rook.",
     solution: {
-        'e4f6': {
-          'e8f7': 'f6h7'
-        },
-        'e4d6': {
-          'e8d7': 'd6f7'
-        }
+        'e3f5': 'e8f7'
     },
     winCondition: (game) => {
-        const board = game.board();
-        const blackRooks = board.flat().filter(p => p?.type === 'r' && p.color === 'b').length;
-        return blackRooks <= 1 && game.history().length > 1;
+        const whiteKnight = game.board().flat().find(p => p?.type === 'n' && p.color === 'w');
+        const history = game.history({verbose: true});
+        const capturedRook = history.some(move => move.color === 'w' && move.captured === 'r');
+        return !!whiteKnight && capturedRook;
     }
   },
   // Level 3: Scholar's Gambit
@@ -93,15 +89,18 @@ export const storyLevels: StoryLevel[] = [
       playerColor: 'w',
       hpMap: createHpMapFromFen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 3"),
       lives: 1,
-      hint: "Your Queen is your most powerful piece. Where can she strike the weakest point (f7)?",
+      hint: "Your Queen is your most powerful piece. Where can she strike the weakest point (f7)? Remember to protect your queen!",
       solution: {
-          'd1f3': {
-              'a7a6': 'f3f7'
-          },
           'd1h5': {
-              'g7g6': 'h5f7'
+              'g7g6': {
+                'h5f3': {
+                    'a7a6': 'f3f7'
+                }
+              }
           }
       },
       winCondition: (game) => game.isCheckmate(),
   },
 ];
+
+    
