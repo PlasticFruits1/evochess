@@ -5,12 +5,14 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
 import type { PieceSymbol, Color, Move as ChessMove } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
+import { evaluateBoard, type EvaluateBoardOutput } from '@/ai/flows/evaluate-board';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
 import ChessBoard from '@/components/chess-board';
+import { EvaluationBar } from '@/components/evaluation-bar';
 import { EvolutionDialog } from '@/components/evolution-dialog';
 import { GameOverDialog } from '@/components/game-over-dialog';
 import { Loader } from '@/components/ui/loader';
@@ -60,6 +62,10 @@ export default function ChessGame() {
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const { toast } = useToast();
   
+  const [evaluation, setEvaluation] = useState<EvaluateBoardOutput>({ evaluation: 0, reason: "The position is balanced." });
+  const [isEvaluating, setIsEvaluating] = useState(false);
+  const [evaluationDisabled, setEvaluationDisabled] = useState(false);
+
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
   const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [game]);
 
@@ -67,6 +73,29 @@ export default function ChessGame() {
     if (gameMode === 'vs-player') return true;
     return game.turn() === playerColor;
   }, [game, gameMode, playerColor]);
+
+  const handleEvaluation = useCallback(async (fen: string) => {
+    if (isEvaluating || evaluationDisabled || gameMode !== 'vs-ai') return;
+    setIsEvaluating(true);
+    try {
+      const result = await evaluateBoard({ boardState: fen });
+      setEvaluation(result);
+    } catch (error: any) {
+      if (error.message && error.message.includes('429')) {
+        toast({
+          title: "Evaluation API Limit Reached",
+          description: "The board evaluation has been disabled for this session.",
+          variant: "destructive"
+        });
+        setEvaluationDisabled(true);
+      } else {
+        console.error("Evaluation failed:", error);
+      }
+      // Keep the last known evaluation on error
+    } finally {
+      setIsEvaluating(false);
+    }
+  }, [isEvaluating, evaluationDisabled, toast, gameMode]);
   
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -127,6 +156,7 @@ export default function ChessGame() {
         }
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
+        handleEvaluation(newGame.fen());
       } else {
          toast({
             title: "AI Error",
@@ -146,7 +176,7 @@ export default function ChessGame() {
     } finally {
         setIsAiThinking(false);
     }
-  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, gameMode, playRandomMove]);
+  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, gameMode, playRandomMove, handleEvaluation, isAiThinking]);
 
   useEffect(() => {
     updateStatus();
@@ -217,10 +247,12 @@ export default function ChessGame() {
   const handleNewGame = useCallback(() => {
     const newGame = new Chess();
     setGame(newGame);
+    setEvaluation({ evaluation: 0, reason: "The position is balanced." });
     
     if (gameMode === 'vs-ai') {
       const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
       setPlayerColor(newPlayerColor);
+      handleEvaluation(newGame.fen());
       if (newPlayerColor === 'b') {
         const fen = newGame.fen();
         const timer = setTimeout(() => triggerAiMove(fen), 500);
@@ -236,7 +268,7 @@ export default function ChessGame() {
     setGameOverInfo(null);
     setIsAiThinking(false);
     setShiningPiece(null);
-  }, [gameMode, triggerAiMove]);
+  }, [gameMode, triggerAiMove, handleEvaluation]);
 
   useEffect(() => {
     handleNewGame();
@@ -296,6 +328,14 @@ export default function ChessGame() {
               <div className="text-center font-semibold text-lg text-foreground/80 h-10 flex items-center justify-center p-2 rounded-md bg-secondary/50">
                 {isAiThinking ? <div className="flex items-center gap-2"><Loader /> AI is thinking...</div> : status}
               </div>
+               {gameMode === 'vs-ai' && (
+                <EvaluationBar
+                  evaluation={evaluation.evaluation}
+                  reason={evaluation.reason}
+                  isEvaluating={isEvaluating}
+                  isDisabled={evaluationDisabled}
+                />
+              )}
               <Button onClick={handleNewGame} variant="secondary" size="lg">New Game</Button>
               
               <div className="grid grid-cols-2 gap-4">
