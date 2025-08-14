@@ -191,7 +191,8 @@ export default function ChessGame() {
 
 
   const handleMove = (from: Square, to: Square) => {
-    if (isGameOver || !isPlayerTurn || isAiThinking || evolutionPrompt) return;
+    if (isGameOver || isAiThinking || evolutionPrompt) return;
+    if (gameMode === 'vs-ai' && !isPlayerTurn) return;
 
     const gameCopy = new Chess(game.fen());
     const moveResult = gameCopy.move({ from, to, promotion: 'q' });
@@ -245,17 +246,31 @@ export default function ChessGame() {
         setTimeout(() => setShiningPiece(null), 2000); // Shine duration
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
+        if (gameMode === 'vs-ai') {
+          updateEvaluation(newGame.fen());
+        }
+      }
+    } else {
+      if (gameMode === 'vs-ai') {
+        updateEvaluation(game.fen());
       }
     }
     setEvolutionPrompt(null);
   };
 
   const handleNewGame = useCallback(() => {
-    const newPlayerColor = gameMode === 'vs-ai' ? (Math.random() > 0.5 ? 'w' : 'b') : 'w';
-    setPlayerColor(newPlayerColor);
-    
     const newGame = new Chess();
     setGame(newGame);
+    
+    if (gameMode === 'vs-ai') {
+      const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
+      setPlayerColor(newPlayerColor);
+      if (newPlayerColor === 'b') {
+        updateEvaluation(newGame.fen());
+      }
+    } else {
+      setPlayerColor('w'); // Default to white for player 1 in vs-player
+    }
 
     setStatus("New game started. White's turn.");
     setLastMove(null);
@@ -264,14 +279,11 @@ export default function ChessGame() {
     setIsAiThinking(false);
     setShiningPiece(null);
     setEvaluation(0);
-    if (gameMode === 'vs-ai' && newPlayerColor === 'b') {
-        updateEvaluation(newGame.fen());
-    }
   }, [updateEvaluation, gameMode]);
 
   useEffect(() => {
     handleNewGame();
-  }, [handleNewGame]);
+  }, [gameMode, handleNewGame]);
 
 
   const handleRematch = () => {
@@ -405,7 +417,6 @@ export default function ChessGame() {
   );
 }
 
-
 function pieceToUnicode(piece: PieceSymbol, color: Color) {
     const map: Record<PieceSymbol, string> = {
         'p': '♙',
@@ -426,5 +437,3 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
-
-    
