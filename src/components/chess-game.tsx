@@ -26,7 +26,6 @@ type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color
 type GameOverInfo = { status: string; winner: 'White' | 'Black' | 'Draw' };
 type GameMode = 'vs-ai' | 'vs-player';
 
-
 const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard', 'Expert', 'Grandmaster'];
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
@@ -75,6 +74,7 @@ const calculateMaterialAdvantage = (game: Chess): number => {
   // Clamp advantage between -10 and 10 for the evaluation bar
   return Math.max(-10, Math.min(10, advantage));
 };
+
 
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
