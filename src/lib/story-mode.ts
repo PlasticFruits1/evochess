@@ -47,15 +47,13 @@ export const storyLevels: StoryLevel[] = [
     title: "The First Step",
     narrative: "Your quest begins in the quiet village of White-haven. A lone pawn, you dream of glory. A grizzled old knight offers you your first challenge. 'The path to greatness is paved with sacrifice,' he says. 'Show me you understand.'",
     objective: "Capture the black pawn to evolve.",
-    fen: "k7/8/8/8/8/4p3/3P4/K7 w - - 0 1",
+    fen: "8/8/8/8/3p4/4P3/8/k1K5 w - - 0 1",
     playerColor: 'w',
-    hpMap: createHpMapFromFen("k7/8/8/8/8/4p3/3P4/K7 w - - 0 1"),
+    hpMap: createHpMapFromFen("8/8/8/8/3p4/4P3/8/k1K5 w - - 0 1"),
     lives: 3,
     hint: "Pawns capture diagonally. Move your pawn to capture the opponent.",
     solution: {
-      'd2d3': 'e3d2', // Wrong move, opponent captures
-      'd2d4': 'e3e2', // Wrong move
-      'd2xe3': 'win' // Correct move
+      'e3d4': 'win'
     },
     winCondition: (game) => {
         const board = game.board();
@@ -73,23 +71,20 @@ export const storyLevels: StoryLevel[] = [
     lives: 2,
     hint: "A knight can attack multiple pieces at once. Find a square where your knight attacks both the king and a rook.",
     solution: {
-        'e4f6': { // This is the check, forcing the king to move.
-          'e8f7': 'f6h7' // Opponent moves, player takes the rook
+        'e4f6': {
+          'e8f7': 'f6h7'
         },
-        'e4d6': { // This is also a check, with a different outcome
+        'e4d6': {
           'e8d7': 'd6f7'
-        },
-        'e4g5': 'h8h1',
-        'e4c5': 'a8a1'
+        }
     },
     winCondition: (game) => {
         const board = game.board();
         const blackRooks = board.flat().filter(p => p?.type === 'r' && p.color === 'b').length;
-        // After the fork, the player should be able to capture a rook.
         return blackRooks <= 1 && game.history().length > 1;
     }
   },
-  // Level 3: Scholar's Mate
+  // Level 3: Scholar's Gambit
   {
       title: "The Scholar's Gambit",
       narrative: "You've proven your cunning. Now you face a true test of strategy. 'The quickest victory is the most decisive,' whispers a cloaked figure. 'End this swiftly.'",
@@ -100,11 +95,11 @@ export const storyLevels: StoryLevel[] = [
       lives: 1,
       hint: "Your Queen is your most powerful piece. Where can she strike the weakest point (f7)?",
       solution: {
-          'd1f3': { // Player's first move
-              'a7a6': 'f3f7' // Opponent's scripted response, then player's winning move is mate
+          'd1f3': {
+              'a7a6': 'f3f7'
           },
-          'c4f7': { // check but not mate
-              'e8f7': 'd1h5'
+          'd1h5': {
+              'g7g6': 'h5f7'
           }
       },
       winCondition: (game) => game.isCheckmate(),
