@@ -172,6 +172,148 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     setStatus(newStatus);
   }, [game, isGameOver, gameMode, currentLevel]);
 
+  const executeMove = (from: Square, to: Square, promotion: PieceSymbol = 'q') => {
+    const gameCopy = new Chess(game.fen());
+    const moveResult = gameCopy.move({ from, to, promotion });
+
+    if (!moveResult) return;
+
+    // HP state update
+    const newHpMap = { ...pieceHp };
+    const pieceState = newHpMap[from];
+    if (pieceState) {
+        delete newHpMap[from];
+        newHpMap[to] = pieceState;
+    }
+
+    setLastMove({ from, to });
+    const wasCapture = !!moveResult.captured;
+    const canEvolve = !!getEvolution(moveResult.piece);
+
+    setPieceHp(newHpMap);
+    const isAiMove = gameMode === 'vs-ai' && moveResult.color !== playerColor;
+    
+    if (wasCapture && canEvolve) {
+        playCaptureSound();
+        if (isAiMove) {
+            const newGame = new Chess(gameCopy.fen());
+            setGame(newGame);
+            setTimeout(() => applyEvolution(to, moveResult.piece, moveResult.color), 500);
+        } else {
+             setEvolutionPrompt({
+                from,
+                to,
+                piece: moveResult.piece,
+                color: moveResult.color,
+                captured: moveResult.captured
+            });
+            const newGame = new Chess(gameCopy.fen());
+            setGame(newGame);
+            checkPuzzleCompletion(newGame);
+        }
+    } else {
+        if (wasCapture) {
+            playCaptureSound();
+        } else {
+            playMoveSound();
+        }
+        const newGame = new Chess(gameCopy.fen());
+        setGame(newGame);
+        checkPuzzleCompletion(newGame);
+    }
+  };
+
+  const handleStoryMove = (from: Square, to: Square) => {
+    const gameCopy = new Chess(fen);
+    const move = gameCopy.move({ from, to });
+    
+    if (!move) {
+        // Not a legal move in chess terms
+        return;
+    }
+    
+    const moveString = `${from}${to}`;
+    const nextStep = currentSolutionNode?.[moveString] ?? currentSolutionNode?.[`${from}${to}${move.promotion}`];
+
+    if (nextStep) {
+        // Correct move
+        executeMove(from, to, move.promotion);
+        
+        if (typeof nextStep === 'string') {
+            // Opponent's turn
+            if (nextStep !== 'win') {
+                setTimeout(() => {
+                    executeMove(nextStep.slice(0, 2) as Square, nextStep.slice(2, 4) as Square);
+                }, 500);
+            }
+            setCurrentSolutionNode(null); // Player needs to find the next move from the root
+        } else {
+            // There are more steps in the solution
+            setCurrentSolutionNode(nextStep);
+        }
+    } else {
+        // Incorrect move
+        const newLives = lives - 1;
+        setLives(newLives);
+        if (newLives <= 0) {
+            setShowPuzzleFailure(true);
+        } else {
+            toast({
+                title: "Incorrect Move!",
+                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
+                variant: "destructive"
+            });
+        }
+    }
+  };
+
+  const handleMove = useCallback((from: Square, to: Square) => {
+    if (isGameOver || isAiThinking || evolutionPrompt || battlePrompt) return;
+    
+    if (gameMode === 'story') {
+        handleStoryMove(from, to);
+        return;
+    }
+
+    const gameCopy = new Chess(game.fen());
+    const move = gameCopy.moves({verbose: true}).find(m => m.from === from && m.to === to)
+    
+    if (!move) return;
+
+    if (move.captured) {
+        const attackerPiece = game.get(move.from);
+        const defenderPiece = game.get(move.to);
+
+        if (!attackerPiece || !defenderPiece) return;
+
+        const attackerHpState = pieceHp[move.from] ?? { hp: pieceHpConfig[attackerPiece.type] ?? 0, maxHp: pieceHpConfig[attackerPiece.type] ?? 0 };
+        const defenderHpState = pieceHp[move.to] ?? { hp: pieceHpConfig[defenderPiece.type] ?? 0, maxHp: pieceHpConfig[defenderPiece.type] ?? 0 };
+
+        const attacker: PieceInfo = {
+            color: move.color === 'w' ? 'White' : 'Black',
+            type: pieceTypeMap[move.piece],
+            hp: attackerHpState.hp,
+            maxHp: pieceHpConfig[attackerPiece.type] ?? 0,
+        };
+
+        const defender: PieceInfo = {
+            color: defenderPiece.color === 'w' ? 'White' : 'Black',
+            type: pieceTypeMap[defenderPiece.type],
+            hp: defenderHpState.hp,
+            maxHp: pieceHpConfig[defenderPiece.type] ?? 0,
+        };
+        
+        const { dialogue, usedIndices } = getPieceDialogue(attacker.type, defender.type, recentlyUsedDialogue);
+        setBattleDialogue(dialogue);
+        setRecentlyUsedDialogue(usedIndices);
+
+        setBattlePrompt({ move: {from, to, promotion: 'q'}, attacker, defender });
+    } else {
+        executeMove(from, to);
+    }
+  }, [game, isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, pieceHp, recentlyUsedDialogue, fen, currentSolutionNode, lives, toast]);
+
+
   const playRandomMove = useCallback(() => {
     const moves = game.moves({verbose: true});
     if (moves.length > 0) {
@@ -245,140 +387,6 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     setGame(newGame);
     checkPuzzleCompletion(newGame);
   };
-
-  const executeMove = (from: Square, to: Square, promotion: PieceSymbol = 'q') => {
-    const gameCopy = new Chess(game.fen());
-    const moveResult = gameCopy.move({ from, to, promotion });
-
-    if (!moveResult) return;
-
-    // HP state update
-    const newHpMap = { ...pieceHp };
-    const pieceState = newHpMap[from];
-    if (pieceState) {
-        delete newHpMap[from];
-        newHpMap[to] = pieceState;
-    }
-
-    setLastMove({ from, to });
-    const wasCapture = !!moveResult.captured;
-    const canEvolve = !!getEvolution(moveResult.piece);
-
-    setPieceHp(newHpMap);
-    const isAiMove = gameMode === 'vs-ai' && moveResult.color !== playerColor;
-    
-    if (wasCapture && canEvolve) {
-        playCaptureSound();
-        if (isAiMove) {
-            const newGame = new Chess(gameCopy.fen());
-            setGame(newGame);
-            setTimeout(() => applyEvolution(to, moveResult.piece, moveResult.color), 500);
-        } else {
-             setEvolutionPrompt({
-                from,
-                to,
-                piece: moveResult.piece,
-                color: moveResult.color,
-                captured: moveResult.captured
-            });
-            const newGame = new Chess(gameCopy.fen());
-            setGame(newGame);
-            checkPuzzleCompletion(newGame);
-        }
-    } else {
-        if (wasCapture) {
-            playCaptureSound();
-        } else {
-            playMoveSound();
-        }
-        const newGame = new Chess(gameCopy.fen());
-        setGame(newGame);
-        checkPuzzleCompletion(newGame);
-    }
-  };
-
-  const handleStoryMove = (from: Square, to: Square) => {
-    const moveString = `${from}${to}`;
-    const nextStep = currentSolutionNode?.[moveString];
-
-    if (nextStep) {
-        // Correct move
-        executeMove(from, to);
-        if (typeof nextStep === 'string') {
-            if (nextStep !== 'win') {
-                 // Opponent's turn
-                setTimeout(() => {
-                    executeMove(nextStep.slice(0, 2) as Square, nextStep.slice(2, 4) as Square);
-                    setCurrentSolutionNode(null); // Player needs to find the next move from the root
-                }, 500);
-            }
-        } else {
-            // There are more steps in the solution
-            setCurrentSolutionNode(nextStep);
-        }
-    } else {
-        // Incorrect move
-        const newLives = lives - 1;
-        setLives(newLives);
-        if (newLives <= 0) {
-            setShowPuzzleFailure(true);
-        } else {
-            toast({
-                title: "Incorrect Move!",
-                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
-                variant: "destructive"
-            });
-        }
-    }
-  };
-
-
-  const handleMove = useCallback((from: Square, to: Square) => {
-    if (isGameOver || isAiThinking || evolutionPrompt || battlePrompt) return;
-    
-    if (gameMode === 'story') {
-        handleStoryMove(from, to);
-        return;
-    }
-
-    const gameCopy = new Chess(game.fen());
-    const move = gameCopy.moves({verbose: true}).find(m => m.from === from && m.to === to)
-    
-    if (!move) return;
-
-    if (move.captured) {
-        const attackerPiece = game.get(move.from);
-        const defenderPiece = game.get(move.to);
-
-        if (!attackerPiece || !defenderPiece) return;
-
-        const attackerHpState = pieceHp[move.from] ?? { hp: pieceHpConfig[attackerPiece.type] ?? 0, maxHp: pieceHpConfig[attackerPiece.type] ?? 0 };
-        const defenderHpState = pieceHp[move.to] ?? { hp: pieceHpConfig[defenderPiece.type] ?? 0, maxHp: pieceHpConfig[defenderPiece.type] ?? 0 };
-
-        const attacker: PieceInfo = {
-            color: move.color === 'w' ? 'White' : 'Black',
-            type: pieceTypeMap[move.piece],
-            hp: attackerHpState.hp,
-            maxHp: pieceHpConfig[attackerPiece.type] ?? 0,
-        };
-
-        const defender: PieceInfo = {
-            color: defenderPiece.color === 'w' ? 'White' : 'Black',
-            type: pieceTypeMap[defenderPiece.type],
-            hp: defenderHpState.hp,
-            maxHp: pieceHpConfig[defenderPiece.type] ?? 0,
-        };
-        
-        const { dialogue, usedIndices } = getPieceDialogue(attacker.type, defender.type, recentlyUsedDialogue);
-        setBattleDialogue(dialogue);
-        setRecentlyUsedDialogue(usedIndices);
-
-        setBattlePrompt({ move: {from, to, promotion: 'q'}, attacker, defender });
-    } else {
-        executeMove(from, to);
-    }
-  }, [game, isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, handleStoryMove, pieceHp, recentlyUsedDialogue]);
-
 
   const handleRoll = () => {
       if (!battlePrompt) return;
@@ -721,5 +729,3 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
-
-    
