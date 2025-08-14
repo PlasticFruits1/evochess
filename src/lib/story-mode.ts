@@ -47,15 +47,14 @@ export const storyLevels: StoryLevel[] = [
     title: "The First Step",
     narrative: "Your quest begins in the quiet village of White-haven. A lone pawn, you dream of glory. A grizzled old knight offers you your first challenge. 'The path to greatness is paved with sacrifice,' he says. 'Show me you understand.'",
     objective: "Capture the black pawn to evolve.",
-    fen: "k7/8/8/8/4p3/8/3P4/K7 w - - 0 1",
+    fen: "k7/8/8/8/8/4p3/3P4/K7 w - - 0 1",
     playerColor: 'w',
-    hpMap: createHpMapFromFen("k7/8/8/8/4p3/8/3P4/K7 w - - 0 1"),
+    hpMap: createHpMapFromFen("k7/8/8/8/8/4p3/3P4/K7 w - - 0 1"),
     lives: 3,
     hint: "Pawns capture diagonally. Move your pawn to capture the opponent.",
     solution: {
-      'd2e3': 'e4d3', // Wrong move, opponent captures
-      'd2d3': 'e4d3', // Wrong move
-      'd2d4': 'e4d3', // Wrong move
+      'd2d3': 'e3d2', // Wrong move, opponent captures
+      'd2d4': 'e3d2', // Wrong move
       'd2xe3': 'win' // Correct move
     },
     winCondition: (game) => {
@@ -68,21 +67,26 @@ export const storyLevels: StoryLevel[] = [
     title: "The Fork in the Road",
     narrative: "Having become a Knight, you journey forth. You come across two enemy rooks guarding a pass. 'True strength is not about brute force,' a mysterious voice echoes, 'but about seeing the paths others cannot.'",
     objective: "Win a rook by using a fork.",
-    fen: "r3k2r/8/8/8/4N3/8/8/4K3 w - - 0 1",
+    fen: "r3k2r/8/8/8/4N3/8/8/R3K2R w KQkq - 0 1",
     playerColor: 'w',
-    hpMap: createHpMapFromFen("r3k2r/8/8/8/4N3/8/8/4K3 w - - 0 1"),
+    hpMap: createHpMapFromFen("r3k2r/8/8/8/4N3/8/8/R3K2R w KQkq - 0 1"),
     lives: 2,
     hint: "A knight can attack multiple pieces at once. Find a square where your knight attacks both the king and a rook.",
     solution: {
-        'e4f6': 'e8f7', // This is the check, forcing the king to move.
-        'e4g5': 'e8e7',
-        'e4d6': 'e8e7'
+        'e4f6': { // This is the check, forcing the king to move.
+          'e8f7': 'f6h7' // Opponent moves, player takes the rook
+        },
+        'e4d6': { // This is also a check, with a different outcome
+          'e8d7': 'd6f7'
+        },
+        'e4g5': 'h8h1',
+        'e4c5': 'a8a1'
     },
     winCondition: (game) => {
         const board = game.board();
         const blackRooks = board.flat().filter(p => p?.type === 'r' && p.color === 'b').length;
         // After the fork, the player should be able to capture a rook.
-        return blackRooks <= 1 && game.history().length > 2;
+        return blackRooks <= 1 && game.history().length > 1;
     }
   },
   // Level 3: Scholar's Mate
@@ -94,12 +98,14 @@ export const storyLevels: StoryLevel[] = [
       playerColor: 'w',
       hpMap: createHpMapFromFen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 3"),
       lives: 1,
-      hint: "Your Queen is your most powerful piece. Where can she strike the weakest point?",
+      hint: "Your Queen is your most powerful piece. Where can she strike the weakest point (f7)?",
       solution: {
           'd1f3': { // Player's first move
-              'a7a6': 'f3f7' // Opponent's scripted response, then player's winning move
+              'a7a6': 'f3f7' // Opponent's scripted response, then player's winning move is mate
           },
-          'c4xf7': 'win' // Alternative immediate win
+          'c4f7': { // check but not mate
+              'e8f7': 'd1h5'
+          }
       },
       winCondition: (game) => game.isCheckmate(),
   },
