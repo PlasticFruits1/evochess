@@ -5,7 +5,6 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
 import type { PieceSymbol, Color, Move as ChessMove } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
-import { evaluateBoard, type EvaluateBoardOutput } from '@/ai/flows/evaluate-board';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -18,7 +17,7 @@ import { GameOverDialog } from '@/components/game-over-dialog';
 import { Loader } from '@/components/ui/loader';
 import { Crown, Swords, User, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { type Move, type Square } from '@/lib/types';
+import { type Move, type Square, type Piece } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 
@@ -48,6 +47,35 @@ const capturedPieces = (game: Chess, color: Color) => {
     return captured;
 };
 
+const pieceValues: Record<PieceSymbol, number> = {
+  p: 1,
+  n: 3,
+  b: 3,
+  r: 5,
+  q: 9,
+  k: 0,
+};
+
+const calculateMaterialAdvantage = (board: (Piece | null)[][]): number => {
+  let whiteScore = 0;
+  let blackScore = 0;
+  board.forEach(row => {
+    row.forEach(piece => {
+      if (piece) {
+        const value = pieceValues[piece.type];
+        if (piece.color === 'w') {
+          whiteScore += value;
+        } else {
+          blackScore += value;
+        }
+      }
+    });
+  });
+  const advantage = whiteScore - blackScore;
+  // Clamp advantage between -10 and 10 for the evaluation bar
+  return Math.max(-10, Math.min(10, advantage));
+};
+
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
   const [game, setGame] = useState(new Chess());
@@ -62,9 +90,7 @@ export default function ChessGame() {
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const { toast } = useToast();
   
-  const [evaluation, setEvaluation] = useState<EvaluateBoardOutput>({ evaluation: 0, reason: "The position is balanced." });
-  const [isEvaluating, setIsEvaluating] = useState(false);
-  const [evaluationDisabled, setEvaluationDisabled] = useState(false);
+  const [evaluation, setEvaluation] = useState<number>(0);
 
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
   const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [game]);
@@ -75,34 +101,9 @@ export default function ChessGame() {
     return game.turn() === playerColor;
   }, [game, gameMode, playerColor]);
 
-  const handleEvaluation = async (currentFen: string) => {
-    if (isEvaluating || evaluationDisabled || gameMode !== 'vs-ai') return;
-    setIsEvaluating(true);
-    try {
-      const result = await evaluateBoard({ boardState: currentFen });
-      setEvaluation(result);
-    } catch (error: any) {
-      if (error.message && error.message.includes('429')) {
-        toast({
-          title: "Evaluation API Limit Reached",
-          description: "The board evaluation has been disabled for this session.",
-          variant: "destructive"
-        });
-        setEvaluationDisabled(true);
-      } else {
-        console.error("Evaluation failed:", error);
-      }
-    } finally {
-      setIsEvaluating(false);
-    }
-  };
-
    useEffect(() => {
-    if (gameMode === 'vs-ai' && !isGameOver) {
-      handleEvaluation(fen);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fen, gameMode, isGameOver]);
+    setEvaluation(calculateMaterialAdvantage(game.board()));
+  }, [game]);
   
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -334,10 +335,7 @@ export default function ChessGame() {
               </div>
                {gameMode === 'vs-ai' && (
                 <EvaluationBar
-                  evaluation={evaluation.evaluation}
-                  reason={evaluation.reason}
-                  isEvaluating={isEvaluating}
-                  isDisabled={evaluationDisabled}
+                  evaluation={evaluation}
                 />
               )}
               <Button onClick={handleNewGame} variant="secondary" size="lg">New Game</Button>
