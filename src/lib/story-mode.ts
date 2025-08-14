@@ -54,7 +54,7 @@ export const storyLevels: StoryLevel[] = [
     hint: "Pawns capture diagonally. Move your pawn to capture the opponent.",
     solution: {
       'd2d3': 'e3d2', // Wrong move, opponent captures
-      'd2d4': 'e3d2', // Wrong move
+      'd2d4': 'e3e2', // Wrong move
       'd2xe3': 'win' // Correct move
     },
     winCondition: (game) => {
@@ -67,9 +67,9 @@ export const storyLevels: StoryLevel[] = [
     title: "The Fork in the Road",
     narrative: "Having become a Knight, you journey forth. You come across two enemy rooks guarding a pass. 'True strength is not about brute force,' a mysterious voice echoes, 'but about seeing the paths others cannot.'",
     objective: "Win a rook by using a fork.",
-    fen: "r3k2r/8/8/8/4N3/8/8/R3K2R w KQkq - 0 1",
+    fen: "r3k2r/8/8/8/4N3/8/8/4K3 w KQkq - 0 1",
     playerColor: 'w',
-    hpMap: createHpMapFromFen("r3k2r/8/8/8/4N3/8/8/R3K2R w KQkq - 0 1"),
+    hpMap: createHpMapFromFen("r3k2r/8/8/8/4N3/8/8/4K3 w KQkq - 0 1"),
     lives: 2,
     hint: "A knight can attack multiple pieces at once. Find a square where your knight attacks both the king and a rook.",
     solution: {
