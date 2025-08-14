@@ -3,9 +3,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
-import type { PieceSymbol, Color, Move as ChessMove, Square } from 'chess.js';
+import type { PieceSymbol, Color, Move as ChessMove } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
-import { evaluateBoard } from '@/ai/flows/evaluate-board';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -17,7 +16,7 @@ import { GameOverDialog } from '@/components/game-over-dialog';
 import { Loader } from '@/components/ui/loader';
 import { Crown, Swords, User, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { type Move } from '@/lib/types';
+import { type Move, type Square } from '@/lib/types';
 import { EvaluationBar } from '@/components/evaluation-bar';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
@@ -46,28 +45,38 @@ const capturedPieces = (game: Chess, color: Color) => {
       }
     }
     return captured;
-  };
+};
 
-function pieceToUnicode(piece: PieceSymbol, color: Color) {
-    const map: Record<PieceSymbol, string> = {
-        'p': '♙',
-        'n': '♘',
-        'b': '♗',
-        'r': '♖',
-        'q': '♕',
-        'k': '♔'
-    };
-    const unicode = map[piece.toLowerCase() as PieceSymbol];
-    const blackUnicodeMap: Record<string, string> = {
-        '♙': '♟',
-        '♘': '♞',
-        '♗': '♝',
-        '♖': '♜',
-        '♕': '♛',
-        '♔': '♚'
-    };
-    return color === 'w' ? unicode : blackUnicodeMap[unicode];
-}
+const pieceValues: { [key in PieceSymbol]: number } = {
+  p: 1,
+  n: 3,
+  b: 3,
+  r: 5,
+  q: 9,
+  k: 0,
+};
+
+const calculateMaterialAdvantage = (game: Chess): number => {
+  let whiteScore = 0;
+  let blackScore = 0;
+  
+  game.board().forEach(row => {
+    row.forEach(square => {
+      if (square) {
+        const value = pieceValues[square.type];
+        if (square.color === 'w') {
+          whiteScore += value;
+        } else {
+          blackScore += value;
+        }
+      }
+    });
+  });
+
+  const evaluation = whiteScore - blackScore;
+  // Clamp evaluation for display purposes, e.g., max advantage of a queen + minor piece
+  return Math.max(-12, Math.min(12, evaluation));
+};
 
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
@@ -82,8 +91,6 @@ export default function ChessGame() {
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const [evaluation, setEvaluation] = useState(0);
-  const [isEvaluating, setIsEvaluating] = useState(false);
-  const [evaluationDisabled, setEvaluationDisabled] = useState(false);
   const { toast } = useToast();
   
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
@@ -93,7 +100,7 @@ export default function ChessGame() {
     if (gameMode === 'vs-player') return true;
     return game.turn() === playerColor;
   }, [game, gameMode, playerColor]);
-
+  
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
     if (isGameOver) {
@@ -114,35 +121,9 @@ export default function ChessGame() {
       playCheckSound();
     }
     setStatus(newStatus);
+    setEvaluation(calculateMaterialAdvantage(game));
   }, [game, isGameOver]);
 
-  const updateEvaluation = useCallback(async (fen: string) => {
-    if(isGameOver || evaluationDisabled || gameMode === 'vs-player') return;
-    setIsEvaluating(true);
-    try {
-      const response = await evaluateBoard({ boardState: fen });
-      setEvaluation(response.evaluation);
-    } catch (error: any) {
-      console.error("Evaluation failed:", error);
-      if (error.message?.includes("429")) {
-         toast({
-            title: "Evaluation Limit Reached",
-            description: "You've exceeded the API quota for the evaluation feature. It has been disabled for now.",
-            variant: "destructive",
-        });
-        setEvaluationDisabled(true);
-      } else {
-         toast({
-          title: "Evaluation API Error",
-          description: "Could not fetch board evaluation.",
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setIsEvaluating(false);
-    }
-  }, [isGameOver, toast, evaluationDisabled, gameMode]);
-  
   const playRandomMove = useCallback(() => {
     const moves = game.moves();
     if (moves.length > 0) {
@@ -151,12 +132,9 @@ export default function ChessGame() {
       gameCopy.move(randomMove);
       const newGame = new Chess(gameCopy.fen());
       setGame(newGame);
-      // In a real game, you would need to get the 'from' and 'to' from the move object
-      // For simplicity here, we're not setting lastMove for random moves
       setLastMove(null);
-      updateEvaluation(newGame.fen());
     }
-  }, [game, updateEvaluation]);
+  }, [game]);
 
   const triggerAiMove = useCallback(async (currentFen: string) => {
     if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt || gameMode === 'vs-player') return;
@@ -183,7 +161,6 @@ export default function ChessGame() {
         }
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
-        updateEvaluation(newGame.fen());
       } else {
          toast({
             title: "AI Error",
@@ -203,7 +180,7 @@ export default function ChessGame() {
     } finally {
         setIsAiThinking(false);
     }
-  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, updateEvaluation, gameMode, playRandomMove]);
+  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, gameMode, playRandomMove]);
 
   useEffect(() => {
     updateStatus();
@@ -212,7 +189,6 @@ export default function ChessGame() {
       return () => clearTimeout(timer);
     }
   }, [game, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, updateStatus, gameMode]);
-
 
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || isAiThinking || evolutionPrompt) return;
@@ -275,17 +251,17 @@ export default function ChessGame() {
   const handleNewGame = useCallback(() => {
     const newGame = new Chess();
     setGame(newGame);
+    setEvaluation(calculateMaterialAdvantage(newGame));
     
     if (gameMode === 'vs-ai') {
       const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
       setPlayerColor(newPlayerColor);
       if (newPlayerColor === 'b') {
-        // If AI is white, it should make the first move.
-        // We also run an initial evaluation.
-        updateEvaluation(newGame.fen());
+        const timer = setTimeout(() => triggerAiMove(newGame.fen()), 500);
+        return () => clearTimeout(timer);
       }
     } else {
-      setPlayerColor('w'); // Default to white for player 1 in vs-player
+      setPlayerColor('w');
     }
 
     setStatus("New game started. White's turn.");
@@ -294,8 +270,7 @@ export default function ChessGame() {
     setGameOverInfo(null);
     setIsAiThinking(false);
     setShiningPiece(null);
-    setEvaluation(0);
-  }, [updateEvaluation, gameMode]);
+  }, [gameMode, triggerAiMove]);
 
   useEffect(() => {
     handleNewGame();
@@ -317,7 +292,7 @@ export default function ChessGame() {
   return (
     <div className="flex justify-center items-center gap-8 w-full max-w-7xl mx-auto p-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 w-full">
-        <div className="lg:col-span-2 flex justify-center items-center gap-4">
+        <div className="lg:col-span-2 flex justify-center items-start gap-4">
           <div className="w-full max-w-[65vh] lg:max-w-[calc(100vh-12rem)]">
             <ChessBoard
               board={game.board()}
@@ -331,7 +306,7 @@ export default function ChessGame() {
               gameMode={gameMode}
             />
           </div>
-          {gameMode === 'vs-ai' && <EvaluationBar evaluation={evaluation} isEvaluating={isEvaluating} isDisabled={evaluationDisabled} />}
+          {gameMode === 'vs-ai' && <EvaluationBar evaluation={evaluation} />}
         </div>
 
         <div className="flex flex-col gap-6">
@@ -431,4 +406,25 @@ export default function ChessGame() {
       )}
     </div>
   );
+}
+
+function pieceToUnicode(piece: PieceSymbol, color: Color) {
+    const map: Record<PieceSymbol, string> = {
+        'p': '♙',
+        'n': '♘',
+        'b': '♗',
+        'r': '♖',
+        'q': '♕',
+        'k': '♔'
+    };
+    const unicode = map[piece.toLowerCase() as PieceSymbol];
+    const blackUnicodeMap: Record<string, string> = {
+        '♙': '♟',
+        '♘': '♞',
+        '♗': '♝',
+        '♖': '♜',
+        '♕': '♛',
+        '♔': '♚'
+    };
+    return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
