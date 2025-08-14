@@ -111,10 +111,11 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
   const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [fen]);
 
   const isPlayerTurn = useMemo(() => {
+    if (isAiThinking || evolutionPrompt || battlePrompt) return false;
     if (gameMode === 'vs-player') return true;
     if (gameMode === 'story') return game.turn() === storyLevels[currentLevel]?.playerColor;
     return game.turn() === playerColor;
-  }, [game, gameMode, playerColor, currentLevel]);
+  }, [game, gameMode, playerColor, currentLevel, isAiThinking, evolutionPrompt, battlePrompt]);
 
   const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
     if (gameMode !== 'story') return;
@@ -177,7 +178,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
 
     if (!moveResult) {
       console.error("Invalid move:", {from, to, promotion});
-      return;
+      return null;
     };
 
     // HP state update
@@ -222,6 +223,70 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
         checkPuzzleCompletion(newGame);
+    }
+    return moveResult;
+  };
+
+   const handleStoryMove = (from: Square, to: Square) => {
+    const gameCopy = new Chess(fen);
+    const move = gameCopy.move({ from, to });
+    
+    if (!move) {
+        return; // Not a legal move in chess terms
+    }
+    
+    const moveString = `${from}${to}${move.promotion || ''}`;
+    // Use the root solution node if currentSolutionNode is null
+    const solutionSource = currentSolutionNode || storyLevels[currentLevel].solution;
+    const nextStep = solutionSource?.[moveString];
+
+
+    if (nextStep) {
+        // Correct move
+        const moveResult = executeMove(from, to, move.promotion);
+        
+        if (typeof nextStep === 'string') {
+            // This is an opponent's move string or 'win'
+            if (nextStep !== 'win') {
+                setTimeout(() => {
+                    const opponentMove = nextStep;
+                    const fromSq = opponentMove.slice(0, 2) as Square;
+                    const toSq = opponentMove.slice(2, 4) as Square;
+                    const promotion = opponentMove.length === 5 ? opponentMove.slice(4) as PieceSymbol : undefined;
+                    executeMove(fromSq, toSq, promotion);
+                }, 500);
+            }
+            // After opponent moves, player needs to find next solution from root
+            setCurrentSolutionNode(storyLevels[currentLevel].solution);
+        } else {
+            // There are more steps in the solution, this is the opponent's turn
+            const opponentMoves = Object.keys(nextStep);
+            if (opponentMoves.length > 0) {
+                 setTimeout(() => {
+                    const opponentMove = opponentMoves[0]; // Assuming one scripted response
+                    const fromSq = opponentMove.slice(0, 2) as Square;
+                    const toSq = opponentMove.slice(2, 4) as Square;
+                    const promotion = opponentMove.length === 5 ? opponentMove.slice(4) as PieceSymbol : undefined;
+                    executeMove(fromSq, toSq, promotion);
+                    // Set the next part of the solution for the player
+                    setCurrentSolutionNode(nextStep[opponentMove]);
+                }, 500);
+            }
+        }
+    } else {
+        // Incorrect move
+        const newLives = lives - 1;
+        setLives(newLives);
+        // Do not update game state, effectively resetting the piece
+        if (newLives <= 0) {
+            setShowPuzzleFailure(true);
+        } else {
+            toast({
+                title: "Incorrect Move!",
+                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
+                variant: "destructive"
+            });
+        }
     }
   };
 
@@ -269,56 +334,8 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     } else {
         executeMove(from, to, move.promotion);
     }
-  }, [game, isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, pieceHp, recentlyUsedDialogue, fen, currentSolutionNode, lives, toast]);
+  }, [game, isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, pieceHp, recentlyUsedDialogue, fen, currentSolutionNode, lives, toast, handleStoryMove]);
   
-  const handleStoryMove = (from: Square, to: Square) => {
-    const gameCopy = new Chess(fen);
-    const move = gameCopy.move({ from, to });
-    
-    if (!move) {
-        return; // Not a legal move in chess terms
-    }
-    
-    const moveString = `${from}${to}`;
-    const nextStep = currentSolutionNode?.[moveString] ?? currentSolutionNode?.[`${from}${to}${move.promotion}`];
-
-    if (nextStep) {
-        // Correct move
-        executeMove(from, to, move.promotion);
-        
-        if (typeof nextStep === 'string') {
-            // Opponent's turn
-            if (nextStep !== 'win') {
-                setTimeout(() => {
-                    const opponentMove = nextStep;
-                    const fromSq = opponentMove.slice(0, 2) as Square;
-                    const toSq = opponentMove.slice(2, 4) as Square;
-                    const promotion = opponentMove.length === 5 ? opponentMove.slice(4) as PieceSymbol : undefined;
-                    executeMove(fromSq, toSq, promotion);
-                }, 500);
-            }
-            setCurrentSolutionNode(null); // Player needs to find the next move from the root
-        } else {
-            // There are more steps in the solution
-            setCurrentSolutionNode(nextStep);
-        }
-    } else {
-        // Incorrect move
-        const newLives = lives - 1;
-        setLives(newLives);
-        // Do not update game state, effectively resetting the piece
-        if (newLives <= 0) {
-            setShowPuzzleFailure(true);
-        } else {
-            toast({
-                title: "Incorrect Move!",
-                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
-                variant: "destructive"
-            });
-        }
-    }
-  };
-
   const playRandomMove = useCallback(() => {
     const moves = game.moves({verbose: true});
     if (moves.length > 0) {
