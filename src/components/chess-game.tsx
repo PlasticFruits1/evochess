@@ -36,7 +36,7 @@ const pieceTypeMap: Record<PieceSymbol, PieceInfo['type']> = {
 };
 
 const pieceHpConfig: Partial<Record<PieceSymbol, number>> = {
-    p: 1, n: 2, b: 3, r: 4, q: 5
+    p: 1, n: 2, b: 3, r: 4, q: 5, k: 10
 };
 
 const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
@@ -117,7 +117,15 @@ export default function ChessGame() {
         setGameOverInfo({ status: newStatus, winner: 'Draw' });
       } else {
         newStatus = "Game Over.";
-        setGameOverInfo({ status: newStatus, winner: 'Draw' });
+        const history = game.history({verbose: true});
+        const lastMove = history[history.length - 1];
+        if (lastMove && lastMove.captured === 'k') {
+          const winner = lastMove.color === 'w' ? 'White' : 'Black';
+          newStatus = `The ${winner === 'White' ? 'Black' : 'White'} King has been defeated! ${winner} wins.`;
+          setGameOverInfo({ status: newStatus, winner });
+        } else {
+          setGameOverInfo({ status: newStatus, winner: 'Draw' });
+        }
       }
     } else if (game.inCheck()) {
       newStatus = `Check! ${newStatus}`;
@@ -242,7 +250,7 @@ export default function ChessGame() {
             color: move.color === 'w' ? 'White' : 'Black',
             type: pieceTypeMap[move.piece],
             hp: attackerHpState.hp,
-            maxHp: attackerHpState.maxHp,
+            maxHp: pieceHpConfig[attackerPiece.type] ?? 0,
         };
 
         const defender: PieceInfo = {
