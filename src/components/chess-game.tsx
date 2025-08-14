@@ -7,6 +7,7 @@ import type { PieceSymbol, Color, Move as ChessMove } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
 import { getPieceDialogue } from '@/lib/dialogue-bank';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
+import { storyLevels, type StoryLevel } from '@/lib/story-mode';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,8 +17,9 @@ import { EvolutionDialog } from '@/components/evolution-dialog';
 import { GameOverDialog } from '@/components/game-over-dialog';
 import { BattleDialog } from '@/components/battle-dialog';
 import { CheckDialog } from '@/components/check-dialog';
+import { PuzzleDialog } from '@/components/puzzle-dialog';
 import { Loader } from '@/components/ui/loader';
-import { Crown, Swords, User, Users } from 'lucide-react';
+import { Crown, Swords, User, Users, BookOpen } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { type Move, type Square, type Piece } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -26,7 +28,7 @@ import { Label } from '@/components/ui/label';
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
 type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color: Color, captured: PieceSymbol | undefined };
 type GameOverInfo = { status: string; winner: 'White' | 'Black' | 'Draw' };
-type GameMode = 'vs-ai' | 'vs-player';
+type GameMode = 'vs-ai' | 'vs-player' | 'story';
 
 type PieceState = { hp: number; maxHp: number; };
 type PieceHpMap = { [key in Square]?: PieceState };
@@ -92,6 +94,8 @@ export default function ChessGame() {
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const [checkInfo, setCheckInfo] = useState<{ show: boolean, isCheckmate: boolean }>({ show: false, isCheckmate: false });
+  const [currentLevel, setCurrentLevel] = useState(0);
+  const [puzzleState, setPuzzleState] = useState<{ showDialog: boolean; level: StoryLevel | null }>({ showDialog: false, level: null });
   const { toast } = useToast();
 
   const fen = game.fen();
@@ -100,10 +104,34 @@ export default function ChessGame() {
 
   const isPlayerTurn = useMemo(() => {
     if (gameMode === 'vs-player') return true;
+    if (gameMode === 'story') return game.turn() === storyLevels[currentLevel]?.playerColor;
     return game.turn() === playerColor;
-  }, [game, gameMode, playerColor]);
+  }, [game, gameMode, playerColor, currentLevel]);
+
+  const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
+    if (gameMode !== 'story') return;
+    const level = storyLevels[currentLevel];
+    if (!level) return;
+
+    if (level.winCondition(gameInstance)) {
+      const nextLevelIndex = currentLevel + 1;
+      if (nextLevelIndex < storyLevels.length) {
+        setTimeout(() => {
+            setCurrentLevel(nextLevelIndex);
+            setPuzzleState({ showDialog: true, level: storyLevels[nextLevelIndex] });
+        }, 1000); // Short delay to see the winning move
+      } else {
+        setGameOverInfo({ status: "You have completed the epic quest!", winner: 'White' });
+      }
+    }
+  }, [gameMode, currentLevel]);
 
   const updateStatus = useCallback(() => {
+    if (gameMode === 'story') {
+      setStatus(`Level ${currentLevel + 1}: ${storyLevels[currentLevel].objective}`);
+      return;
+    }
+
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
     if (isGameOver) {
       playGameOverSound();
@@ -133,7 +161,7 @@ export default function ChessGame() {
       setCheckInfo({ show: true, isCheckmate: false });
     }
     setStatus(newStatus);
-  }, [game, isGameOver]);
+  }, [game, isGameOver, gameMode, currentLevel]);
 
   const playRandomMove = useCallback(() => {
     const moves = game.moves({verbose: true});
@@ -144,7 +172,7 @@ export default function ChessGame() {
   }, [game]);
 
   const triggerAiMove = useCallback(async (currentFen: string) => {
-    if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt || battlePrompt || gameMode === 'vs-player') return;
+    if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt || battlePrompt || gameMode !== 'vs-ai') return;
 
     setIsAiThinking(true);
     try {
@@ -206,6 +234,7 @@ export default function ChessGame() {
     setTimeout(() => setShiningPiece(null), 2000); // Shine duration
     const newGame = new Chess(gameCopy.fen());
     setGame(newGame);
+    checkPuzzleCompletion(newGame);
   };
 
   const executeMove = (from: Square, to: Square, promotion: PieceSymbol = 'q') => {
@@ -247,6 +276,7 @@ export default function ChessGame() {
             });
             const newGame = new Chess(gameCopy.fen());
             setGame(newGame);
+            checkPuzzleCompletion(newGame);
         }
     } else {
         if (wasCapture) {
@@ -256,6 +286,7 @@ export default function ChessGame() {
         }
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
+        checkPuzzleCompletion(newGame);
     }
   };
 
@@ -348,6 +379,7 @@ export default function ChessGame() {
         gameCopy.load(tokens.join(" "));
         setGame(gameCopy);
         playMoveSound();
+        checkPuzzleCompletion(gameCopy);
       }
 
       setBattlePrompt(null);
@@ -401,7 +433,24 @@ export default function ChessGame() {
     setIsAiThinking(false);
     setShiningPiece(null);
     setCheckInfo({ show: false, isCheckmate: false });
+    setCurrentLevel(0);
+    setPuzzleState({ showDialog: false, level: null });
+
+    if (gameMode === 'story') {
+        const firstLevel = storyLevels[0];
+        setPuzzleState({ showDialog: true, level: firstLevel });
+    }
+
   }, [gameMode, playerColor]);
+
+  const startPuzzle = () => {
+    if (!puzzleState.level) return;
+    const game = new Chess(puzzleState.level.fen);
+    setGame(game);
+    setPieceHp(puzzleState.level.hpMap ?? {});
+    setPlayerColor(puzzleState.level.playerColor);
+    setPuzzleState({ showDialog: false, level: null });
+  };
 
   useEffect(() => {
     handleNewGame();
@@ -449,20 +498,27 @@ export default function ChessGame() {
               <CardDescription>A magical twist on a classic game.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
-               {gameMode === 'vs-ai' ? (
+               {gameMode === 'vs-ai' && (
                   <div className="flex items-center justify-center gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
                     <User /> You are playing as 
                     <span className={cn("font-bold", playerColor === 'w' ? 'text-stone-50' : 'text-stone-900', 'drop-shadow-lg')}>{playerColor === 'w' ? 'White' : 'Black'}</span>
                   </div>
-                ) : (
+                )}
+                {gameMode === 'vs-player' && (
                   <div className="flex items-center justify-center gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
                     <Users /> Player vs. Player
                   </div>
                 )}
+                 {gameMode === 'story' && (
+                  <div className="flex items-center justify-center gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
+                    <BookOpen /> Story Mode
+                  </div>
+                )}
+
               <div className="text-center font-semibold text-lg text-foreground/80 h-10 flex items-center justify-center p-2 rounded-md bg-secondary/50">
                 {isAiThinking ? <div className="flex items-center gap-2"><Loader /> AI is thinking...</div> : status}
               </div>
-              <Button onClick={handleNewGame} variant="secondary" size="lg">New Game</Button>
+              <Button onClick={handleNewGame} variant="secondary" size="lg">New Game / Change Mode</Button>
               
               <div className="grid grid-cols-2 gap-4">
                  <div>
@@ -474,12 +530,13 @@ export default function ChessGame() {
                       <SelectContent>
                         <SelectItem value="vs-ai">vs. AI</SelectItem>
                         <SelectItem value="vs-player">vs. Player</SelectItem>
+                        <SelectItem value="story">Story Mode</SelectItem>
                       </SelectContent>
                     </Select>
                  </div>
                  <div>
                   <Label htmlFor="difficulty">Difficulty</Label>
-                   <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || evolutionPrompt !== null || isGameOver || gameMode === 'vs-player' || !!battlePrompt}>
+                   <Select value={difficulty} onValueChange={(value: Difficulty) => setDifficulty(value)} disabled={isAiThinking || evolutionPrompt !== null || isGameOver || gameMode !== 'vs-ai' || !!battlePrompt}>
                     <SelectTrigger id="difficulty">
                       <SelectValue placeholder="Select difficulty" />
                     </SelectTrigger>
@@ -536,6 +593,15 @@ export default function ChessGame() {
             onRoll={handleRoll}
             onProceed={handleBattleProceed}
             diceResult={diceResult}
+        />
+      )}
+
+      {puzzleState.showDialog && puzzleState.level && (
+        <PuzzleDialog
+            open={puzzleState.showDialog}
+            level={puzzleState.level}
+            levelNumber={currentLevel + 1}
+            onStart={startPuzzle}
         />
       )}
 
