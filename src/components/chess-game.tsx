@@ -56,10 +56,10 @@ const pieceValues: Record<PieceSymbol, number> = {
   k: 0,
 };
 
-const calculateMaterialAdvantage = (board: (Piece | null)[][]): number => {
+const calculateMaterialAdvantage = (game: Chess): number => {
   let whiteScore = 0;
   let blackScore = 0;
-  board.forEach(row => {
+  game.board().forEach(row => {
     row.forEach(piece => {
       if (piece) {
         const value = pieceValues[piece.type];
@@ -102,8 +102,8 @@ export default function ChessGame() {
   }, [game, gameMode, playerColor]);
 
    useEffect(() => {
-    setEvaluation(calculateMaterialAdvantage(game.board()));
-  }, [game]);
+    setEvaluation(calculateMaterialAdvantage(game));
+  }, [fen, game]);
   
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
