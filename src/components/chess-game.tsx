@@ -68,17 +68,18 @@ export default function ChessGame() {
 
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
   const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [game]);
+  const fen = useMemo(() => game.fen(), [game]);
 
   const isPlayerTurn = useMemo(() => {
     if (gameMode === 'vs-player') return true;
     return game.turn() === playerColor;
   }, [game, gameMode, playerColor]);
 
-  const handleEvaluation = useCallback(async (fen: string) => {
+  const handleEvaluation = useCallback(async (currentFen: string) => {
     if (isEvaluating || evaluationDisabled || gameMode !== 'vs-ai') return;
     setIsEvaluating(true);
     try {
-      const result = await evaluateBoard({ boardState: fen });
+      const result = await evaluateBoard({ boardState: currentFen });
       setEvaluation(result);
     } catch (error: any) {
       if (error.message && error.message.includes('429')) {
@@ -99,9 +100,9 @@ export default function ChessGame() {
 
    useEffect(() => {
     if (gameMode === 'vs-ai' && !isGameOver) {
-      handleEvaluation(game.fen());
+      handleEvaluation(fen);
     }
-  }, [game, gameMode]);
+  }, [fen, gameMode, isGameOver, handleEvaluation]);
   
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
@@ -436,3 +437,5 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
+    
