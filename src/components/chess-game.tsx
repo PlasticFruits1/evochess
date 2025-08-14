@@ -222,8 +222,7 @@ export default function ChessGame() {
       setPlayerColor(newPlayerColor);
       if (newPlayerColor === 'b') {
         const fen = newGame.fen();
-        const timer = setTimeout(() => triggerAiMove(fen), 500);
-        return () => clearTimeout(timer);
+        triggerAiMove(fen);
       }
     } else {
       setPlayerColor('w');
