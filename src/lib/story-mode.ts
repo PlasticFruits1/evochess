@@ -42,66 +42,58 @@ const createHpMapFromFen = (fen: string): PieceHpMap => {
 }
 
 export const storyLevels: StoryLevel[] = [
-  // Level 1: The First Step
+  // Level 1: The Queen's Strike (Mate in 1)
   {
-    title: "The First Step",
-    narrative: "Your quest begins in the quiet village of White-haven. A lone pawn, you dream of glory. A grizzled old knight offers you your first challenge. 'The path to greatness is paved with sacrifice,' he says. 'Show me you understand.'",
-    objective: "Capture the black pawn to evolve.",
-    fen: "8/8/8/8/3p4/4P3/8/k1K5 w - - 0 1",
+    title: "The Queen's Strike",
+    narrative: "The first lesson of a true warrior is to recognize overwhelming advantage. Your queen stands ready. Seize the opportunity and end the battle with a single, decisive blow.",
+    objective: "Deliver checkmate in one move.",
+    fen: "6k1/8/8/8/8/8/4Q3/K7 w - - 0 1",
     playerColor: 'w',
-    hpMap: createHpMapFromFen("8/8/8/8/3p4/4P3/8/k1K5 w - - 0 1"),
+    hpMap: createHpMapFromFen("6k1/8/8/8/8/8/4Q3/K7 w - - 0 1"),
     lives: 3,
-    hint: "Pawns capture diagonally. Move your pawn to capture the opponent.",
+    hint: "Your Queen is a powerful piece. Find the square where she can attack the enemy king without being captured.",
     solution: {
-      'e3d4': 'win'
+      'e2e8': 'win'
     },
-    winCondition: (game) => {
-        const board = game.board();
-        return board.flat().some(p => p?.type === 'n' && p.color === 'w');
-    }
+    winCondition: (game) => game.isCheckmate(),
   },
-  // Level 2: The Fork in the Road
+  // Level 2: The Rook's Ladder (Mate in 2)
   {
-    title: "The Fork in the Road",
-    narrative: "Having become a Knight, you journey forth. You come across a king and his rook guarding a pass. 'True strength is not about brute force,' a mysterious voice echoes, 'but about seeing the paths others cannot.'",
-    objective: "Win the rook by using a fork.",
-    fen: "4k2r/8/8/8/5N2/8/8/K7 w - - 0 1",
+    title: "The Rook's Ladder",
+    narrative: "A true commander uses all forces in concert. Your rooks are poised to create a 'ladder,' climbing the board to trap the enemy king. The first move is not the final one; it is the setup for victory.",
+    objective: "Deliver checkmate in two moves.",
+    fen: "6k1/8/8/8/R7/8/R7/K7 w - - 0 1",
     playerColor: 'w',
-    hpMap: createHpMapFromFen("4k2r/8/8/8/5N2/8/8/K7 w - - 0 1"),
-    lives: 2,
-    hint: "A knight can attack multiple pieces at once. Find a square where your knight attacks both the king and the rook.",
+    hpMap: createHpMapFromFen("6k1/8/8/8/R7/8/R7/K7 w - - 0 1"),
+    lives: 3,
+    hint: "Use one rook to force the king to a new rank, then use the other rook to deliver the final blow.",
     solution: {
-        'f4g6': {
-            'e8f7': {
-                'g6h8': 'win'
+        'a4a7': { // Player's first move
+            'g8h8': { // Opponent's forced move
+                'a2h2': 'win' // Player's winning move
             }
         }
     },
-    winCondition: (game) => {
-        const history = game.history({verbose: true});
-        const capturedRook = history.some(move => move.color === 'w' && move.captured === 'r');
-        return capturedRook;
-    }
+    winCondition: (game) => game.isCheckmate(),
   },
-  // Level 3: Scholar's Gambit
+  // Level 3: The Pawn's Power (Promotion & Mate)
   {
-      title: "The Scholar's Gambit",
-      narrative: "You've proven your cunning. Now you face a true test of strategy. 'The quickest victory is the most decisive,' whispers a cloaked figure. 'End this swiftly.'",
-      objective: "Deliver checkmate in 2 moves.",
-      fen: "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 3",
+      title: "The Pawn's Power",
+      narrative: "The humblest soldier can become the greatest hero. Your pawn is on the verge of glory. Guide it to the final rank to unlock its true potential and secure victory.",
+      objective: "Promote your pawn and then deliver checkmate.",
+      fen: "7k/P7/8/8/8/8/8/K7 w - - 0 1",
       playerColor: 'w',
-      hpMap: createHpMapFromFen("r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 2 3"),
-      lives: 1,
-      hint: "Your Queen is your most powerful piece. Where can she strike the weakest point (f7)? Remember to protect your queen!",
+      hpMap: createHpMapFromFen("7k/P7/8/8/8/8/8/K7 w - - 0 1"),
+      lives: 2,
+      hint: "Advance your pawn to the 8th rank to promote it to a Queen. Then, use your new Queen to checkmate the lonely king.",
       solution: {
-          'd1h5': {
-              'g7g6': {
-                'h5e5': 'win'
+          'a7a8q': { // Player promotes pawn
+              'h8g7': { // Opponent's forced move
+                'a8g8': 'win' // Player delivers checkmate
               }
           }
       },
       winCondition: (game) => game.isCheckmate(),
   },
 ];
-
     
