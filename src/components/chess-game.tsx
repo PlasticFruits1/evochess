@@ -220,10 +220,7 @@ export default function ChessGame() {
     if (gameMode === 'vs-ai') {
       const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
       setPlayerColor(newPlayerColor);
-      if (newPlayerColor === 'b') {
-        const fen = newGame.fen();
-        triggerAiMove(fen);
-      }
+      // Removed the immediate AI move trigger from here to let useEffect handle it
     } else {
       setPlayerColor('w');
     }
@@ -234,7 +231,7 @@ export default function ChessGame() {
     setGameOverInfo(null);
     setIsAiThinking(false);
     setShiningPiece(null);
-  }, [gameMode, triggerAiMove]);
+  }, [gameMode]);
 
   useEffect(() => {
     handleNewGame();
