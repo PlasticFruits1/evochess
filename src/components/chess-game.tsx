@@ -15,6 +15,7 @@ import ChessBoard from '@/components/chess-board';
 import { EvolutionDialog } from '@/components/evolution-dialog';
 import { GameOverDialog } from '@/components/game-over-dialog';
 import { BattleDialog } from '@/components/battle-dialog';
+import { CheckDialog } from '@/components/check-dialog';
 import { Loader } from '@/components/ui/loader';
 import { Crown, Swords, User, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -90,6 +91,7 @@ export default function ChessGame() {
   const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null);
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
+  const [checkInfo, setCheckInfo] = useState<{ show: boolean, isCheckmate: boolean }>({ show: false, isCheckmate: false });
   const { toast } = useToast();
 
   const fen = game.fen();
@@ -109,6 +111,7 @@ export default function ChessGame() {
         const winner = game.turn() === 'w' ? 'Black' : 'White';
         newStatus = `Checkmate! ${winner} wins.`;
         setGameOverInfo({ status: newStatus, winner });
+        setCheckInfo({ show: true, isCheckmate: true });
       } else if (game.isDraw()) {
         newStatus = "Draw!";
         setGameOverInfo({ status: newStatus, winner: 'Draw' });
@@ -119,6 +122,7 @@ export default function ChessGame() {
     } else if (game.inCheck()) {
       newStatus = `Check! ${newStatus}`;
       playCheckSound();
+      setCheckInfo({ show: true, isCheckmate: false });
     }
     setStatus(newStatus);
   }, [game, isGameOver]);
@@ -219,13 +223,6 @@ export default function ChessGame() {
 
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || isAiThinking || evolutionPrompt || battlePrompt) return;
-
-    if (gameMode === 'vs-ai' && !isPlayerTurn && game.turn() !== playerColor) {
-      // AI move
-    } else if (gameMode === 'vs-ai' && !isPlayerTurn) {
-        return; // Not AI's turn to move, but not player's turn either (should not happen)
-    }
-
 
     const gameCopy = new Chess(game.fen());
     const move = gameCopy.moves({verbose: true}).find(m => m.from === from && m.to === to)
@@ -384,6 +381,7 @@ export default function ChessGame() {
     setGameOverInfo(null);
     setIsAiThinking(false);
     setShiningPiece(null);
+    setCheckInfo({ show: false, isCheckmate: false });
   }, [gameMode]);
 
   useEffect(() => {
@@ -522,7 +520,15 @@ export default function ChessGame() {
         />
       )}
 
-      {gameOverInfo && (
+      {checkInfo.show && (
+        <CheckDialog
+          open={checkInfo.show}
+          isCheckmate={checkInfo.isCheckmate}
+          onClose={() => setCheckInfo({ show: false, isCheckmate: false })}
+        />
+      )}
+      
+      {gameOverInfo && !checkInfo.isCheckmate && (
         <GameOverDialog
           open={!!gameOverInfo}
           status={gameOverInfo.status}
@@ -555,3 +561,5 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
+    
