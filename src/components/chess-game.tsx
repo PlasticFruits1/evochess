@@ -116,8 +116,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     return game.turn() === playerColor;
   }, [game, gameMode, playerColor, currentLevel]);
 
-
-   const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
+  const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
     if (gameMode !== 'story') return;
     const level = storyLevels[currentLevel];
     if (!level) return;
@@ -172,11 +171,14 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     setStatus(newStatus);
   }, [game, isGameOver, gameMode, currentLevel]);
 
-  const executeMove = (from: Square, to: Square, promotion: PieceSymbol = 'q') => {
+  const executeMove = (from: Square, to: Square, promotion?: PieceSymbol) => {
     const gameCopy = new Chess(game.fen());
     const moveResult = gameCopy.move({ from, to, promotion });
 
-    if (!moveResult) return;
+    if (!moveResult) {
+      console.error("Invalid move:", {from, to, promotion});
+      return;
+    };
 
     // HP state update
     const newHpMap = { ...pieceHp };
@@ -223,50 +225,6 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     }
   };
 
-  const handleStoryMove = (from: Square, to: Square) => {
-    const gameCopy = new Chess(fen);
-    const move = gameCopy.move({ from, to });
-    
-    if (!move) {
-        // Not a legal move in chess terms
-        return;
-    }
-    
-    const moveString = `${from}${to}`;
-    const nextStep = currentSolutionNode?.[moveString] ?? currentSolutionNode?.[`${from}${to}${move.promotion}`];
-
-    if (nextStep) {
-        // Correct move
-        executeMove(from, to, move.promotion);
-        
-        if (typeof nextStep === 'string') {
-            // Opponent's turn
-            if (nextStep !== 'win') {
-                setTimeout(() => {
-                    executeMove(nextStep.slice(0, 2) as Square, nextStep.slice(2, 4) as Square);
-                }, 500);
-            }
-            setCurrentSolutionNode(null); // Player needs to find the next move from the root
-        } else {
-            // There are more steps in the solution
-            setCurrentSolutionNode(nextStep);
-        }
-    } else {
-        // Incorrect move
-        const newLives = lives - 1;
-        setLives(newLives);
-        if (newLives <= 0) {
-            setShowPuzzleFailure(true);
-        } else {
-            toast({
-                title: "Incorrect Move!",
-                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
-                variant: "destructive"
-            });
-        }
-    }
-  };
-
   const handleMove = useCallback((from: Square, to: Square) => {
     if (isGameOver || isAiThinking || evolutionPrompt || battlePrompt) return;
     
@@ -307,12 +265,59 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         setBattleDialogue(dialogue);
         setRecentlyUsedDialogue(usedIndices);
 
-        setBattlePrompt({ move: {from, to, promotion: 'q'}, attacker, defender });
+        setBattlePrompt({ move: {from, to, promotion: move.promotion}, attacker, defender });
     } else {
-        executeMove(from, to);
+        executeMove(from, to, move.promotion);
     }
   }, [game, isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, pieceHp, recentlyUsedDialogue, fen, currentSolutionNode, lives, toast]);
+  
+  const handleStoryMove = (from: Square, to: Square) => {
+    const gameCopy = new Chess(fen);
+    const move = gameCopy.move({ from, to });
+    
+    if (!move) {
+        return; // Not a legal move in chess terms
+    }
+    
+    const moveString = `${from}${to}`;
+    const nextStep = currentSolutionNode?.[moveString] ?? currentSolutionNode?.[`${from}${to}${move.promotion}`];
 
+    if (nextStep) {
+        // Correct move
+        executeMove(from, to, move.promotion);
+        
+        if (typeof nextStep === 'string') {
+            // Opponent's turn
+            if (nextStep !== 'win') {
+                setTimeout(() => {
+                    const opponentMove = nextStep;
+                    const fromSq = opponentMove.slice(0, 2) as Square;
+                    const toSq = opponentMove.slice(2, 4) as Square;
+                    const promotion = opponentMove.length === 5 ? opponentMove.slice(4) as PieceSymbol : undefined;
+                    executeMove(fromSq, toSq, promotion);
+                }, 500);
+            }
+            setCurrentSolutionNode(null); // Player needs to find the next move from the root
+        } else {
+            // There are more steps in the solution
+            setCurrentSolutionNode(nextStep);
+        }
+    } else {
+        // Incorrect move
+        const newLives = lives - 1;
+        setLives(newLives);
+        // Do not update game state, effectively resetting the piece
+        if (newLives <= 0) {
+            setShowPuzzleFailure(true);
+        } else {
+            toast({
+                title: "Incorrect Move!",
+                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
+                variant: "destructive"
+            });
+        }
+    }
+  };
 
   const playRandomMove = useCallback(() => {
     const moves = game.moves({verbose: true});
@@ -418,7 +423,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       if (!battlePrompt || !diceResult) return;
       
       if (diceResult.remainingHp <= 0) {
-        executeMove(battlePrompt.move.from, battlePrompt.move.to);
+        executeMove(battlePrompt.move.from, battlePrompt.move.to, battlePrompt.move.promotion);
       } else {
         const gameCopy = new Chess(game.fen());
         const tokens = gameCopy.fen().split(" ");
