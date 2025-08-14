@@ -127,11 +127,7 @@ export default function ChessGame() {
     const moves = game.moves({verbose: true});
     if (moves.length > 0) {
       const randomMove = moves[Math.floor(Math.random() * moves.length)];
-      const gameCopy = new Chess(game.fen());
-      gameCopy.move(randomMove);
-      const newGame = new Chess(gameCopy.fen());
-      setGame(newGame);
-      setLastMove({ from: randomMove.from, to: randomMove.to });
+      handleMove(randomMove.from, randomMove.to);
     }
   }, [game]);
 
@@ -223,7 +219,13 @@ export default function ChessGame() {
 
   const handleMove = (from: Square, to: Square) => {
     if (isGameOver || isAiThinking || evolutionPrompt || battlePrompt) return;
-    if (gameMode === 'vs-ai' && !isPlayerTurn) return;
+
+    if (gameMode === 'vs-ai' && !isPlayerTurn && game.turn() !== playerColor) {
+      // AI move
+    } else if (gameMode === 'vs-ai' && !isPlayerTurn) {
+        return; // Not AI's turn to move, but not player's turn either (should not happen)
+    }
+
 
     const gameCopy = new Chess(game.fen());
     const move = gameCopy.moves({verbose: true}).find(m => m.from === from && m.to === to)
