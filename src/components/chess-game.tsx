@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
-import type { PieceSymbol, Square, Color } from 'chess.js';
+import type { PieceSymbol, Color } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
 import { evaluateBoard } from '@/ai/flows/evaluate-board';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
@@ -17,7 +17,7 @@ import { GameOverDialog } from '@/components/game-over-dialog';
 import { Loader } from '@/components/ui/loader';
 import { Crown, Swords, User, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { type Move } from '@/lib/types';
+import { type Move, type Square } from '@/lib/types';
 import { EvaluationBar } from '@/components/evaluation-bar';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
@@ -47,6 +47,27 @@ const capturedPieces = (game: Chess, color: Color) => {
     }
     return captured;
   };
+
+function pieceToUnicode(piece: PieceSymbol, color: Color) {
+    const map: Record<PieceSymbol, string> = {
+        'p': '♙',
+        'n': '♘',
+        'b': '♗',
+        'r': '♖',
+        'q': '♕',
+        'k': '♔'
+    };
+    const unicode = map[piece.toLowerCase() as PieceSymbol];
+    const blackUnicodeMap: Record<string, string> = {
+        '♙': '♟',
+        '♘': '♞',
+        '♗': '♝',
+        '♖': '♜',
+        '♕': '♛',
+        '♔': '♚'
+    };
+    return color === 'w' ? unicode : blackUnicodeMap[unicode];
+}
 
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
@@ -122,6 +143,17 @@ export default function ChessGame() {
     }
   }, [isGameOver, toast, evaluationDisabled, gameMode]);
   
+  const playRandomMove = useCallback(() => {
+    const moves = game.moves();
+    if (moves.length > 0) {
+      const randomMove = moves[Math.floor(Math.random() * moves.length)];
+      const newGame = new Chess(game.fen());
+      newGame.move(randomMove);
+      setGame(new Chess(newGame.fen()));
+      setLastMove(null); // Or set to the random move
+    }
+  }, [game]);
+
   const triggerAiMove = useCallback(async (currentFen: string) => {
     if (isGameOver || game.turn() === playerColor || isAiThinking || evolutionPrompt || gameMode === 'vs-player') return;
 
@@ -130,8 +162,7 @@ export default function ChessGame() {
       const response = await generateChessMove({ boardState: currentFen, difficulty });
       
       const gameCopy = new Chess(currentFen);
-      // The AI can sometimes generate an invalid move. We'll try to use it, but have a fallback.
-      const move = gameCopy.move(response.move, {strict: true});
+      const move = gameCopy.move(response.move);
 
       if (move) {
         setLastMove({ from: move.from, to: move.to });
@@ -144,21 +175,12 @@ export default function ChessGame() {
         setGame(newGame);
         updateEvaluation(newGame.fen());
       } else {
-         // This block should ideally not be reached if the AI is well-behaved, but it's a good fallback.
          toast({
             title: "AI Error",
             description: `The AI suggested an invalid move (${response.move}). A random move was played instead.`,
             variant: "destructive"
           });
-         const moves = game.moves();
-         if (moves.length > 0) {
-            const randomMove = moves[Math.floor(Math.random() * moves.length)];
-            const newGame = new Chess(game.fen());
-            newGame.move(randomMove);
-            setGame(new Chess(newGame.fen()));
-            setLastMove(null);
-            updateEvaluation(newGame.fen());
-          }
+          playRandomMove();
       }
     } catch (error) {
       console.error("AI move failed, falling back to random move:", error);
@@ -167,19 +189,11 @@ export default function ChessGame() {
         description: `An AI error occurred. A random move was played instead.`,
         variant: "destructive"
       });
-      const moves = game.moves();
-      if (moves.length > 0) {
-        const randomMove = moves[Math.floor(Math.random() * moves.length)];
-        const newGame = new Chess(game.fen());
-        newGame.move(randomMove);
-        setGame(new Chess(newGame.fen()));
-        setLastMove(null);
-        updateEvaluation(newGame.fen());
-      }
+      playRandomMove();
     } finally {
         setIsAiThinking(false);
     }
-  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, updateEvaluation, updateStatus, gameMode]);
+  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, updateEvaluation, gameMode, playRandomMove]);
 
   useEffect(() => {
     updateStatus();
@@ -224,7 +238,7 @@ export default function ChessGame() {
       }
       const newGame = new Chess(gameCopy.fen());
       setGame(newGame);
-       if (gameMode === 'vs-ai') {
+      if (gameMode === 'vs-ai' && game.turn() !== playerColor) {
         updateEvaluation(newGame.fen());
       }
     }
@@ -246,12 +260,12 @@ export default function ChessGame() {
         setTimeout(() => setShiningPiece(null), 2000); // Shine duration
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
-        if (gameMode === 'vs-ai') {
-          updateEvaluation(newGame.fen());
+         if (gameMode === 'vs-ai' && game.turn() !== playerColor) {
+           updateEvaluation(newGame.fen());
         }
       }
     } else {
-      if (gameMode === 'vs-ai') {
+      if (gameMode === 'vs-ai' && game.turn() !== playerColor) {
         updateEvaluation(game.fen());
       }
     }
@@ -417,23 +431,4 @@ export default function ChessGame() {
   );
 }
 
-function pieceToUnicode(piece: PieceSymbol, color: Color) {
-    const map: Record<PieceSymbol, string> = {
-        'p': '♙',
-        'n': '♘',
-        'b': '♗',
-        'r': '♖',
-        'q': '♕',
-        'k': '♔'
-    };
-    const unicode = map[piece.toLowerCase() as PieceSymbol];
-    const blackUnicodeMap: Record<string, string> = {
-        '♙': '♟',
-        '♘': '♞',
-        '♗': '♝',
-        '♖': '♜',
-        '♕': '♛',
-        '♔': '♚'
-    };
-    return color === 'w' ? unicode : blackUnicodeMap[unicode];
-}
+    
