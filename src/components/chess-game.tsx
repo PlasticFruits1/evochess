@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from '@/components/ui/button';
 import ChessBoard from '@/components/chess-board';
-import { EvaluationBar } from '@/components/evaluation-bar';
 import { EvolutionDialog } from '@/components/evolution-dialog';
 import { GameOverDialog } from '@/components/game-over-dialog';
 import { Loader } from '@/components/ui/loader';
@@ -46,36 +45,6 @@ const capturedPieces = (game: Chess, color: Color) => {
     return captured;
 };
 
-const pieceValues: Record<PieceSymbol, number> = {
-  p: 1,
-  n: 3,
-  b: 3,
-  r: 5,
-  q: 9,
-  k: 0,
-};
-
-const calculateMaterialAdvantage = (game: Chess): number => {
-  let whiteScore = 0;
-  let blackScore = 0;
-  game.board().forEach(row => {
-    row.forEach(piece => {
-      if (piece) {
-        const value = pieceValues[piece.type];
-        if (piece.color === 'w') {
-          whiteScore += value;
-        } else {
-          blackScore += value;
-        }
-      }
-    });
-  });
-  const advantage = whiteScore - blackScore;
-  // Clamp advantage between -10 and 10 for the evaluation bar
-  return Math.max(-10, Math.min(10, advantage));
-};
-
-
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
   const [game, setGame] = useState(new Chess());
@@ -90,21 +59,14 @@ export default function ChessGame() {
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const { toast } = useToast();
   
-  const [evaluation, setEvaluation] = useState<number>(0);
-
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
   const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [game]);
-  const fen = useMemo(() => game.fen(), [game]);
 
   const isPlayerTurn = useMemo(() => {
     if (gameMode === 'vs-player') return true;
     return game.turn() === playerColor;
   }, [game, gameMode, playerColor]);
 
-   useEffect(() => {
-    setEvaluation(calculateMaterialAdvantage(game));
-  }, [fen, game]);
-  
   const updateStatus = useCallback(() => {
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
     if (isGameOver) {
@@ -333,11 +295,6 @@ export default function ChessGame() {
               <div className="text-center font-semibold text-lg text-foreground/80 h-10 flex items-center justify-center p-2 rounded-md bg-secondary/50">
                 {isAiThinking ? <div className="flex items-center gap-2"><Loader /> AI is thinking...</div> : status}
               </div>
-               {gameMode === 'vs-ai' && (
-                <EvaluationBar
-                  evaluation={evaluation}
-                />
-              )}
               <Button onClick={handleNewGame} variant="secondary" size="lg">New Game</Button>
               
               <div className="grid grid-cols-2 gap-4">
