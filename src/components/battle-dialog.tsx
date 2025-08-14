@@ -10,14 +10,15 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import type { Piece, PieceSymbol } from "@/lib/types";
-import { Swords } from "lucide-react";
+import { Dices, Swords } from "lucide-react";
 import { Loader } from "./ui/loader";
 
 
 type PieceInfo = {
     color: 'White' | 'Black',
-    type: 'Pawn' | 'Knight' | 'Bishop' | 'Rook' | 'Queen' | 'King'
+    type: 'Pawn' | 'Knight' | 'Bishop' | 'Rook' | 'Queen' | 'King',
+    hp: number,
+    maxHp: number,
 }
 
 interface BattleDialogProps {
@@ -27,6 +28,8 @@ interface BattleDialogProps {
   dialogue?: { attackerLine: string; defenderLine: string; };
   isLoading: boolean;
   onProceed: () => void;
+  onRoll: () => void;
+  diceResult: { roll: number, remainingHp: number } | null;
 }
 
 function pieceToUnicode(piece: PieceInfo) {
@@ -51,7 +54,7 @@ function pieceToUnicode(piece: PieceInfo) {
 }
 
 
-export function BattleDialog({ open, attacker, defender, dialogue, isLoading, onProceed }: BattleDialogProps) {
+export function BattleDialog({ open, attacker, defender, dialogue, isLoading, onProceed, onRoll, diceResult }: BattleDialogProps) {
 
   return (
     <AlertDialog open={open}>
@@ -64,7 +67,7 @@ export function BattleDialog({ open, attacker, defender, dialogue, isLoading, on
             The pieces face off on the checkered field.
           </AlertDialogDescription>
         </AlertDialogHeader>
-        
+
         {isLoading && (
             <div className="flex flex-col items-center justify-center gap-4 py-8">
                 <Loader />
@@ -77,24 +80,43 @@ export function BattleDialog({ open, attacker, defender, dialogue, isLoading, on
                 <div className="flex items-center gap-4">
                     <span className="text-4xl">{pieceToUnicode(attacker)}</span>
                     <div className="bg-secondary p-3 rounded-lg flex-1">
-                        <p className="font-bold">{attacker.type}:</p>
+                        <p className="font-bold">{attacker.type} ({attacker.hp}/{attacker.maxHp} HP)</p>
                         <p className="italic">"{dialogue.attackerLine}"</p>
                     </div>
                 </div>
                  <div className="flex items-center gap-4 flex-row-reverse">
                     <span className="text-4xl">{pieceToUnicode(defender)}</span>
                     <div className="bg-muted p-3 rounded-lg flex-1 text-right">
-                        <p className="font-bold">{defender.type}:</p>
+                        <p className="font-bold">{defender.type} ({defender.hp}/{defender.maxHp} HP)</p>
                         <p className="italic">"{dialogue.defenderLine}"</p>
                     </div>
                 </div>
             </div>
         )}
+        
+        {diceResult && (
+          <div className="text-center py-4 space-y-2">
+            <p className="text-2xl font-bold">You rolled a <span className="text-primary">{diceResult.roll}</span>!</p>
+            {diceResult.remainingHp > 0 ? (
+                <p>The defender survives with {diceResult.remainingHp} HP remaining.</p>
+            ) : (
+                <p>A fatal blow! The defender is vanquished.</p>
+            )}
+          </div>
+        )}
+
 
         <AlertDialogFooter>
-          <Button onClick={onProceed} disabled={isLoading} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-            {isLoading ? "Awaiting the clash..." : "Engage!"}
-          </Button>
+          {!diceResult ? (
+            <Button onClick={onRoll} disabled={isLoading} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                <Dices className="mr-2" />
+                {isLoading ? "Awaiting..." : "Roll for Damage!"}
+            </Button>
+          ) : (
+            <Button onClick={onProceed} className="bg-primary hover:bg-primary/90 text-primary-foreground">
+              Continue
+            </Button>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

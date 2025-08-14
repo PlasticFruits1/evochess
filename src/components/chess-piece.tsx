@@ -38,7 +38,7 @@ export function ChessPiece({ piece, isEvolving }: ChessPieceProps) {
 
   return (
     <div className={cn(
-        "w-full h-full p-1 transition-transform duration-200 ease-in-out group-hover:scale-110 flex items-center justify-center",
+        "w-full h-full p-1 transition-transform duration-200 ease-in-out group-hover:scale-110 flex items-center justify-center flex-1",
         isEvolving && "shimmer"
     )}>
         <span

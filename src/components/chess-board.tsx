@@ -1,13 +1,18 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Board, Square, Piece, Color, Move } from '@/lib/types';
 import { ChessPiece } from '@/components/chess-piece';
 import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress';
+
+type PieceState = { hp: number; maxHp: number; };
+type PieceHpMap = { [key in Square]?: PieceState };
 
 interface ChessBoardProps {
   board: Board;
+  pieceHp: PieceHpMap;
   turn: Color;
   onMove: (from: Square, to: Square) => void;
   lastMove: { from: Square; to: Square } | null;
@@ -18,7 +23,7 @@ interface ChessBoardProps {
   gameMode: 'vs-ai' | 'vs-player';
 }
 
-export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece, validMoves, playerColor, isPlayerTurn, gameMode }: ChessBoardProps) {
+export default function ChessBoard({ board, pieceHp, onMove, turn, lastMove, shiningPiece, validMoves, playerColor, isPlayerTurn, gameMode }: ChessBoardProps) {
   const [fromSquare, setFromSquare] = useState<Square | null>(null);
 
   const handleSquareClick = (square: Square) => {
@@ -60,6 +65,7 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
           files.map(file => {
             const square = `${file}${rank}` as Square;
             const piece = getPieceAtSquare(square);
+            const hpState = piece ? pieceHp[square] : undefined;
             
             const rankIndex = 8 - rank;
             const fileIndex = file.charCodeAt(0) - 'a'.charCodeAt(0);
@@ -76,7 +82,7 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
                 key={square}
                 onClick={() => handleSquareClick(square)}
                 className={cn(
-                  'flex justify-center items-center relative group h-full w-full',
+                  'flex justify-center items-center relative group h-full w-full p-1',
                   isDark ? 'bg-primary/30' : 'bg-primary/10',
                   isPlayerTurn && getPieceAtSquare(square)?.color === turn && 'cursor-pointer',
                   'border border-primary/20'
@@ -86,10 +92,15 @@ export default function ChessBoard({ board, onMove, turn, lastMove, shiningPiece
                 {isSelectedSquare && <div className="absolute inset-0 bg-yellow-400/30" />}
                 
                 {piece && (
-                  <ChessPiece
-                    piece={piece}
-                    isEvolving={shiningPiece === square}
-                  />
+                  <div className="w-full h-full flex flex-col items-center justify-end">
+                     <ChessPiece
+                      piece={piece}
+                      isEvolving={shiningPiece === square}
+                    />
+                    {hpState && hpState.maxHp > 0 && (
+                        <Progress value={(hpState.hp / hpState.maxHp) * 100} className="h-1.5 w-full bg-red-500/50 [&>div]:bg-green-500" />
+                    )}
+                  </div>
                 )}
                 
                 {isPossibleMove && !isCaptureMove && (

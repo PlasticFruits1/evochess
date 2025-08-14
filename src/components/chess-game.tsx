@@ -27,9 +27,29 @@ type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color
 type GameOverInfo = { status: string; winner: 'White' | 'Black' | 'Draw' };
 type GameMode = 'vs-ai' | 'vs-player';
 
+type PieceState = { hp: number; maxHp: number; };
+type PieceHpMap = { [key in Square]?: PieceState };
+
+const pieceTypeMap: Record<PieceSymbol, PieceInfo['type']> = {
+    p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King'
+};
+
+const pieceHpConfig: Partial<Record<PieceSymbol, number>> = {
+    p: 1, n: 2, b: 3, r: 4, q: 5
+};
+
+const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
+  const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
+    p: 'n', n: 'b', b: 'r', r: 'q',
+  };
+  return evolutionMap[piece.toLowerCase() as PieceSymbol] || null;
+};
+
 type PieceInfo = {
     color: 'White' | 'Black',
-    type: 'Pawn' | 'Knight' | 'Bishop' | 'Rook' | 'Queen' | 'King'
+    type: 'Pawn' | 'Knight' | 'Bishop' | 'Rook' | 'Queen' | 'King',
+    hp: number,
+    maxHp: number,
 };
 
 type BattlePromptInfo = {
@@ -41,12 +61,6 @@ type BattlePromptInfo = {
 
 const difficulties: Difficulty[] = ['Easy', 'Medium', 'Hard', 'Expert', 'Grandmaster'];
 
-const getEvolution = (piece: PieceSymbol): PieceSymbol | null => {
-  const evolutionMap: Partial<Record<PieceSymbol, PieceSymbol>> = {
-    p: 'n', n: 'b', b: 'r', r: 'q',
-  };
-  return evolutionMap[piece.toLowerCase() as PieceSymbol] || null;
-};
 
 const capturedPieces = (game: Chess, color: Color) => {
     const history = game.history({verbose: true});
@@ -59,13 +73,10 @@ const capturedPieces = (game: Chess, color: Color) => {
     return captured;
 };
 
-const pieceTypeMap: Record<PieceSymbol, PieceInfo['type']> = {
-    p: 'Pawn', n: 'Knight', b: 'Bishop', r: 'Rook', q: 'Queen', k: 'King'
-};
-
 export default function ChessGame() {
   useTone(); // Initialize audio context on user interaction
   const [game, setGame] = useState(new Chess());
+  const [pieceHp, setPieceHp] = useState<PieceHpMap>({});
   const [gameMode, setGameMode] = useState<GameMode>('vs-ai');
   const [difficulty, setDifficulty] = useState<Difficulty>('Medium');
   const [playerColor, setPlayerColor] = useState<Color>('w');
@@ -75,11 +86,13 @@ export default function ChessGame() {
   const [battlePrompt, setBattlePrompt] = useState<BattlePromptInfo | null>(null);
   const [battleDialogue, setBattleDialogue] = useState<GenerateChessDialogueOutput | null>(null);
   const [isGeneratingDialogue, setIsGeneratingDialogue] = useState(false);
+  const [diceResult, setDiceResult] = useState<{ roll: number, remainingHp: number } | null>(null);
   const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null);
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const { toast } = useToast();
-  
+
+  const fen = game.fen();
   const isGameOver = useMemo(() => game.isGameOver(), [game]);
   const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [game]);
 
@@ -135,18 +148,7 @@ export default function ChessGame() {
       
       let moveResult: ChessMove | null = null;
       if (isMoveLegal) {
-        moveResult = gameCopy.move(response.move);
-      }
-      
-      if (moveResult) {
-        setLastMove({ from: moveResult.from, to: moveResult.to });
-        if (moveResult.captured) {
-            playCaptureSound();
-        } else {
-            playMoveSound();
-        }
-        const newGame = new Chess(gameCopy.fen());
-        setGame(newGame);
+          handleMove(response.move.slice(0, 2) as Square, response.move.slice(2, 4) as Square);
       } else {
          toast({
             title: "AI Error",
@@ -172,10 +174,11 @@ export default function ChessGame() {
   useEffect(() => {
     updateStatus();
     if (gameMode === 'vs-ai' && game.turn() !== playerColor && !isGameOver && !isAiThinking && !evolutionPrompt && !battlePrompt) {
-      const timer = setTimeout(() => triggerAiMove(game.fen()), 500);
+      const timer = setTimeout(() => triggerAiMove(fen), 500);
       return () => clearTimeout(timer);
     }
-  }, [game, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, battlePrompt, updateStatus, gameMode]);
+  }, [fen, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, battlePrompt, updateStatus, gameMode]);
+
 
   const executeMove = (from: Square, to: Square, promotion: PieceSymbol = 'q') => {
     const gameCopy = new Chess(game.fen());
@@ -183,9 +186,19 @@ export default function ChessGame() {
 
     if (!moveResult) return;
 
+    // HP state update
+    const newHpMap = { ...pieceHp };
+    const pieceState = newHpMap[from];
+    if (pieceState) {
+        delete newHpMap[from];
+        newHpMap[to] = pieceState;
+    }
+
     setLastMove({ from, to });
     const wasCapture = !!moveResult.captured;
     const canEvolve = !!getEvolution(moveResult.piece);
+
+    setPieceHp(newHpMap);
     
     if (wasCapture && canEvolve) {
         playCaptureSound();
@@ -219,14 +232,26 @@ export default function ChessGame() {
     if (!move) return;
 
     if (move.captured) {
+        const attackerPiece = game.get(move.from);
+        const defenderPiece = game.get(move.to);
+
+        if (!attackerPiece || !defenderPiece) return;
+
+        const attackerHp = pieceHp[move.from] ?? { hp: 0, maxHp: 0};
+        const defenderHp = pieceHp[move.to] ?? { hp: 0, maxHp: 0};
+
         const attacker: PieceInfo = {
             color: move.color === 'w' ? 'White' : 'Black',
             type: pieceTypeMap[move.piece],
+            hp: attackerHp.hp,
+            maxHp: attackerHp.maxHp,
         };
-        const defenderPiece = game.get(move.to);
+
         const defender: PieceInfo = {
             color: defenderPiece.color === 'w' ? 'White' : 'Black',
             type: pieceTypeMap[defenderPiece.type],
+            hp: defenderHp.hp,
+            maxHp: defenderHp.maxHp
         };
         
         setBattlePrompt({ move: {from, to, promotion: 'q'}, attacker, defender });
@@ -240,26 +265,64 @@ export default function ChessGame() {
           if (!battlePrompt) return;
           setIsGeneratingDialogue(true);
           try {
-              const dialogue = await generateChessDialogue({ attacker: battlePrompt.attacker, defender: battlePrompt.defender });
+              const dialogue = await generateChessDialogue({ 
+                  attacker: { color: battlePrompt.attacker.color, type: battlePrompt.attacker.type }, 
+                  defender: { color: battlePrompt.defender.color, type: battlePrompt.defender.type } 
+                });
               setBattleDialogue(dialogue);
           } catch(e) {
               console.error("Error generating dialogue", e);
               toast({ title: "Dialogue Error", description: "The muses were silent. The battle proceeds without words.", variant: "destructive" });
-              // If dialogue fails, just execute the move.
-              executeMove(battlePrompt.move.from, battlePrompt.move.to);
-              setBattlePrompt(null);
+              setBattleDialogue({ attackerLine: "...", defenderLine: "..." });
           } finally {
             setIsGeneratingDialogue(false);
           }
       }
       getDialogue();
-  }, [battlePrompt, toast])
+  }, [battlePrompt, toast]);
+
+
+  const handleRoll = () => {
+      if (!battlePrompt) return;
+      
+      const roll = Math.floor(Math.random() * 6) + 1;
+      const defenderSquare = battlePrompt.move.to;
+      const defenderCurrentHp = pieceHp[defenderSquare]?.hp ?? 0;
+      const remainingHp = defenderCurrentHp - roll;
+
+      setDiceResult({ roll, remainingHp });
+
+      if (remainingHp <= 0) {
+        // Defender is vanquished
+        const newHpMap = { ...pieceHp };
+        delete newHpMap[defenderSquare];
+        setPieceHp(newHpMap);
+      } else {
+        // Defender survives
+        const newHpMap = { ...pieceHp };
+        newHpMap[defenderSquare] = { ...newHpMap[defenderSquare]!, hp: remainingHp };
+        setPieceHp(newHpMap);
+      }
+  };
 
   const handleBattleProceed = () => {
-      if (!battlePrompt) return;
-      executeMove(battlePrompt.move.from, battlePrompt.move.to);
+      if (!battlePrompt || !diceResult) return;
+      
+      if (diceResult.remainingHp <= 0) {
+        // Defender was defeated, so attacker moves
+        executeMove(battlePrompt.move.from, battlePrompt.move.to);
+      } else {
+        // Defender survived, attacker does not move
+        playMoveSound();
+        const gameCopy = new Chess(game.fen());
+        gameCopy.turn(); // just to switch turns
+        const newGame = new Chess(gameCopy.fen());
+        setGame(newGame);
+      }
+
       setBattlePrompt(null);
       setBattleDialogue(null);
+      setDiceResult(null);
   }
 
   const handleEvolution = (evolve: boolean) => {
@@ -274,6 +337,15 @@ export default function ChessGame() {
         const gameCopy = new Chess(game.fen()); 
         gameCopy.put({ type: newPieceType, color: color }, to);
         playEvolveSound();
+
+        // Update HP for the evolved piece
+        const newHp = pieceHpConfig[newPieceType];
+        if (newHp) {
+            const newHpMap = { ...pieceHp };
+            newHpMap[to] = { hp: newHp, maxHp: newHp };
+            setPieceHp(newHpMap);
+        }
+
         setShiningPiece(to);
         setTimeout(() => setShiningPiece(null), 2000); // Shine duration
         const newGame = new Chess(gameCopy.fen());
@@ -294,11 +366,25 @@ export default function ChessGame() {
       setPlayerColor('w');
     }
 
+    const initialHp: PieceHpMap = {};
+    newGame.board().forEach((row, rankIndex) => {
+        row.forEach((piece, fileIndex) => {
+            if (piece) {
+                const hp = pieceHpConfig[piece.type];
+                if (hp) {
+                    initialHp[piece.square] = { hp, maxHp: hp };
+                }
+            }
+        })
+    });
+    setPieceHp(initialHp);
+
     setStatus("New game started. White's turn.");
     setLastMove(null);
     setEvolutionPrompt(null);
     setBattlePrompt(null);
     setBattleDialogue(null);
+    setDiceResult(null);
     setGameOverInfo(null);
     setIsAiThinking(false);
     setShiningPiece(null);
@@ -328,6 +414,7 @@ export default function ChessGame() {
           <div className="w-full max-w-[65vh] lg:max-w-[calc(100vh-12rem)]">
             <ChessBoard
               board={game.board()}
+              pieceHp={pieceHp}
               onMove={handleMove}
               turn={game.turn()}
               lastMove={lastMove}
@@ -433,7 +520,9 @@ export default function ChessGame() {
             defender={battlePrompt.defender}
             dialogue={battleDialogue ?? undefined}
             isLoading={isGeneratingDialogue}
+            onRoll={handleRoll}
             onProceed={handleBattleProceed}
+            diceResult={diceResult}
         />
       )}
 
