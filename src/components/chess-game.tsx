@@ -95,8 +95,8 @@ export default function ChessGame() {
   const { toast } = useToast();
 
   const fen = game.fen();
-  const isGameOver = useMemo(() => game.isGameOver(), [game]);
-  const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [game]);
+  const isGameOver = useMemo(() => game.isGameOver(), [fen]);
+  const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [fen]);
 
   const isPlayerTurn = useMemo(() => {
     if (gameMode === 'vs-player') return true;
@@ -175,7 +175,7 @@ export default function ChessGame() {
     } finally {
         setIsAiThinking(false);
     }
-  }, [game, difficulty, playerColor, isGameOver, toast, evolutionPrompt, battlePrompt, gameMode, playRandomMove, isAiThinking]);
+  }, [difficulty, playerColor, isGameOver, toast, evolutionPrompt, battlePrompt, gameMode, playRandomMove, isAiThinking, game]);
 
 
   useEffect(() => {
@@ -186,6 +186,27 @@ export default function ChessGame() {
     }
   }, [fen, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, battlePrompt, updateStatus, gameMode]);
 
+
+  const applyEvolution = (to: Square, piece: PieceSymbol, color: Color) => {
+    const newPieceType = getEvolution(piece);
+    if (!newPieceType) return;
+    
+    const gameCopy = new Chess(game.fen());
+    gameCopy.put({ type: newPieceType, color: color }, to);
+    playEvolveSound();
+
+    const newHp = pieceHpConfig[newPieceType];
+    if (newHp) {
+      const newHpMap = { ...pieceHp };
+      newHpMap[to] = { hp: newHp, maxHp: newHp };
+      setPieceHp(newHpMap);
+    }
+
+    setShiningPiece(to);
+    setTimeout(() => setShiningPiece(null), 2000); // Shine duration
+    const newGame = new Chess(gameCopy.fen());
+    setGame(newGame);
+  };
 
   const executeMove = (from: Square, to: Square, promotion: PieceSymbol = 'q') => {
     const gameCopy = new Chess(game.fen());
@@ -206,18 +227,27 @@ export default function ChessGame() {
     const canEvolve = !!getEvolution(moveResult.piece);
 
     setPieceHp(newHpMap);
+    const isAiMove = gameMode === 'vs-ai' && moveResult.color !== playerColor;
     
     if (wasCapture && canEvolve) {
         playCaptureSound();
-        setEvolutionPrompt({
-            from,
-            to,
-            piece: moveResult.piece,
-            color: moveResult.color,
-            captured: moveResult.captured
-        });
-        const newGame = new Chess(gameCopy.fen());
-        setGame(newGame);
+        if (isAiMove) {
+            // AI always evolves
+            const newGame = new Chess(gameCopy.fen());
+            setGame(newGame);
+            // Apply evolution after a short delay for effect
+            setTimeout(() => applyEvolution(to, moveResult.piece, moveResult.color), 500);
+        } else {
+             setEvolutionPrompt({
+                from,
+                to,
+                piece: moveResult.piece,
+                color: moveResult.color,
+                captured: moveResult.captured
+            });
+            const newGame = new Chess(gameCopy.fen());
+            setGame(newGame);
+        }
     } else {
         if (wasCapture) {
             playCaptureSound();
@@ -331,26 +361,7 @@ export default function ChessGame() {
     const { to, piece, color } = evolutionPrompt;
     
     if (evolve) {
-      const newPieceType = getEvolution(piece);
-      
-      if (newPieceType) {
-        const gameCopy = new Chess(game.fen()); 
-        gameCopy.put({ type: newPieceType, color: color }, to);
-        playEvolveSound();
-
-        // Update HP for the evolved piece
-        const newHp = pieceHpConfig[newPieceType];
-        if (newHp) {
-            const newHpMap = { ...pieceHp };
-            newHpMap[to] = { hp: newHp, maxHp: newHp };
-            setPieceHp(newHpMap);
-        }
-
-        setShiningPiece(to);
-        setTimeout(() => setShiningPiece(null), 2000); // Shine duration
-        const newGame = new Chess(gameCopy.fen());
-        setGame(newGame);
-      }
+      applyEvolution(to, piece, color);
     }
     setEvolutionPrompt(null);
   };
@@ -360,7 +371,7 @@ export default function ChessGame() {
     setGame(newGame);
     
     if (gameMode === 'vs-ai') {
-      const newPlayerColor = Math.random() > 0.5 ? 'w' : 'b';
+      const newPlayerColor = playerColor === 'w' ? 'b' : 'w'; // Switch colors on new game
       setPlayerColor(newPlayerColor);
     } else {
       setPlayerColor('w');
@@ -390,11 +401,11 @@ export default function ChessGame() {
     setIsAiThinking(false);
     setShiningPiece(null);
     setCheckInfo({ show: false, isCheckmate: false });
-  }, [gameMode]);
+  }, [gameMode, playerColor]);
 
   useEffect(() => {
     handleNewGame();
-  }, [gameMode, handleNewGame]);
+  }, [gameMode]);
 
 
   const handleRematch = () => {
@@ -569,5 +580,3 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
-
-    
