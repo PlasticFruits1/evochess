@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Chess } from 'chess.js';
 import type { PieceSymbol, Color, Move as ChessMove } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
-import { generateChessDialogue, type GenerateChessDialogueOutput } from '@/ai/flows/generate-chess-dialogue';
+import { getPieceDialogue } from '@/lib/dialogue-bank';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -84,8 +84,8 @@ export default function ChessGame() {
   const [status, setStatus] = useState("White's turn to move.");
   const [evolutionPrompt, setEvolutionPrompt] = useState<EvolutionPromptInfo | null>(null);
   const [battlePrompt, setBattlePrompt] = useState<BattlePromptInfo | null>(null);
-  const [battleDialogue, setBattleDialogue] = useState<GenerateChessDialogueOutput | null>(null);
-  const [isGeneratingDialogue, setIsGeneratingDialogue] = useState(false);
+  const [battleDialogue, setBattleDialogue] = useState<{ attackerLine: string; defenderLine: string } | null>(null);
+  const [recentlyUsedDialogue, setRecentlyUsedDialogue] = useState<Record<string, number[]>>({});
   const [diceResult, setDiceResult] = useState<{ roll: number, remainingHp: number } | null>(null);
   const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null);
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
@@ -146,7 +146,6 @@ export default function ChessGame() {
       const legalMoves = gameCopy.moves({verbose: true});
       const isMoveLegal = legalMoves.some(m => m.from + m.to === response.move || m.from + m.to + (m.promotion || '') === response.move);
       
-      let moveResult: ChessMove | null = null;
       if (isMoveLegal) {
           handleMove(response.move.slice(0, 2) as Square, response.move.slice(2, 4) as Square);
       } else {
@@ -254,32 +253,15 @@ export default function ChessGame() {
             maxHp: defenderHp.maxHp
         };
         
+        const { dialogue, usedIndices } = getPieceDialogue(attacker.type, defender.type, recentlyUsedDialogue);
+        setBattleDialogue(dialogue);
+        setRecentlyUsedDialogue(usedIndices);
+
         setBattlePrompt({ move: {from, to, promotion: 'q'}, attacker, defender });
     } else {
         executeMove(from, to);
     }
   };
-
-  useEffect(() => {
-      const getDialogue = async () => {
-          if (!battlePrompt) return;
-          setIsGeneratingDialogue(true);
-          try {
-              const dialogue = await generateChessDialogue({ 
-                  attacker: { color: battlePrompt.attacker.color, type: battlePrompt.attacker.type }, 
-                  defender: { color: battlePrompt.defender.color, type: battlePrompt.defender.type } 
-                });
-              setBattleDialogue(dialogue);
-          } catch(e) {
-              console.error("Error generating dialogue", e);
-              toast({ title: "Dialogue Error", description: "The muses were silent. The battle proceeds without words.", variant: "destructive" });
-              setBattleDialogue({ attackerLine: "...", defenderLine: "..." });
-          } finally {
-            setIsGeneratingDialogue(false);
-          }
-      }
-      getDialogue();
-  }, [battlePrompt, toast]);
 
 
   const handleRoll = () => {
@@ -313,11 +295,17 @@ export default function ChessGame() {
         executeMove(battlePrompt.move.from, battlePrompt.move.to);
       } else {
         // Defender survived, attacker does not move
-        playMoveSound();
+        // We still need to advance the turn. A null move is not supported by chess.js
+        // So we just toggle the turn in a copy of the game state.
         const gameCopy = new Chess(game.fen());
-        gameCopy.turn(); // just to switch turns
-        const newGame = new Chess(gameCopy.fen());
-        setGame(newGame);
+        const turn = gameCopy.turn();
+        // This is a bit of a hack. We load the FEN, which clears the history,
+        // so we can't just flip the turn. We can, however, load a new FEN where the turn is flipped.
+        const tokens = gameCopy.fen().split(" ");
+        tokens[1] = turn === "w" ? "b" : "w";
+        gameCopy.load(tokens.join(" "));
+        setGame(gameCopy);
+        playMoveSound();
       }
 
       setBattlePrompt(null);
@@ -367,8 +355,8 @@ export default function ChessGame() {
     }
 
     const initialHp: PieceHpMap = {};
-    newGame.board().forEach((row, rankIndex) => {
-        row.forEach((piece, fileIndex) => {
+    newGame.board().forEach((row) => {
+        row.forEach((piece) => {
             if (piece) {
                 const hp = pieceHpConfig[piece.type];
                 if (hp) {
@@ -384,6 +372,7 @@ export default function ChessGame() {
     setEvolutionPrompt(null);
     setBattlePrompt(null);
     setBattleDialogue(null);
+    setRecentlyUsedDialogue({});
     setDiceResult(null);
     setGameOverInfo(null);
     setIsAiThinking(false);
@@ -519,7 +508,7 @@ export default function ChessGame() {
             attacker={battlePrompt.attacker}
             defender={battlePrompt.defender}
             dialogue={battleDialogue ?? undefined}
-            isLoading={isGeneratingDialogue}
+            isLoading={false}
             onRoll={handleRoll}
             onProceed={handleBattleProceed}
             diceResult={diceResult}

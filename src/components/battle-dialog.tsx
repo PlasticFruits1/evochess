@@ -80,14 +80,14 @@ export function BattleDialog({ open, attacker, defender, dialogue, isLoading, on
                 <div className="flex items-center gap-4">
                     <span className="text-4xl">{pieceToUnicode(attacker)}</span>
                     <div className="bg-secondary p-3 rounded-lg flex-1">
-                        <p className="font-bold">{attacker.type} ({attacker.hp}/{attacker.maxHp} HP)</p>
+                        <p className="font-bold">{attacker.type} (HP: {attacker.hp}/{attacker.maxHp})</p>
                         <p className="italic">"{dialogue.attackerLine}"</p>
                     </div>
                 </div>
                  <div className="flex items-center gap-4 flex-row-reverse">
                     <span className="text-4xl">{pieceToUnicode(defender)}</span>
                     <div className="bg-muted p-3 rounded-lg flex-1 text-right">
-                        <p className="font-bold">{defender.type} ({defender.hp}/{defender.maxHp} HP)</p>
+                        <p className="font-bold">{defender.type} (HP: {defender.hp}/{defender.maxHp})</p>
                         <p className="italic">"{dialogue.defenderLine}"</p>
                     </div>
                 </div>
