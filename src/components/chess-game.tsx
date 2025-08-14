@@ -7,7 +7,7 @@ import type { PieceSymbol, Color } from 'chess.js';
 import { generateChessMove } from '@/ai/flows/generate-chess-move';
 import { getPieceDialogue } from '@/lib/dialogue-bank';
 import { playMoveSound, playCaptureSound, playEvolveSound, playCheckSound, playGameOverSound, useTone } from '@/lib/sounds';
-import { storyLevels, type StoryLevel } from '@/lib/story-mode';
+import { puzzles, type Puzzle, type Role, type PromoRole, type EvolutionStep } from '@/lib/story-mode';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -99,48 +99,31 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
   const [checkInfo, setCheckInfo] = useState<{ show: boolean, isCheckmate: boolean }>({ show: false, isCheckmate: false });
-  const [currentLevel, setCurrentLevel] = useState(0);
-  const [puzzleState, setPuzzleState] = useState<{ showDialog: boolean; level: StoryLevel | null }>({ showDialog: false, level: null });
+  const [currentPuzzleIndex, setCurrentPuzzleIndex] = useState(0);
+  const [puzzleState, setPuzzleState] = useState<{ showDialog: boolean; puzzle: Puzzle | null }>({ showDialog: false, puzzle: null });
   const [lives, setLives] = useState(3);
-  const [currentSolutionNode, setCurrentSolutionNode] = useState<any>(null);
+  const [currentPly, setCurrentPly] = useState(0);
   const [showPuzzleFailure, setShowPuzzleFailure] = useState(false);
   const { toast } = useToast();
 
   const fen = game.fen();
   const isGameOver = useMemo(() => game.isGameOver(), [fen]);
   const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [fen]);
+  const currentPuzzle = useMemo(() => gameMode === 'story' ? puzzles[currentPuzzleIndex] : null, [gameMode, currentPuzzleIndex]);
 
   const isPlayerTurn = useMemo(() => {
     if (isAiThinking || evolutionPrompt || battlePrompt) return false;
     if (gameMode === 'vs-player') return true;
-    if (gameMode === 'story') return game.turn() === storyLevels[currentLevel]?.playerColor;
+    if (gameMode === 'story') return game.turn() === playerColor;
     return game.turn() === playerColor;
-  }, [game, gameMode, playerColor, currentLevel, isAiThinking, evolutionPrompt, battlePrompt, fen]);
-
-  const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
-    if (gameMode !== 'story') return;
-    const level = storyLevels[currentLevel];
-    if (!level) return;
-
-    if (level.winCondition(gameInstance)) {
-      const nextLevelIndex = currentLevel + 1;
-      if (nextLevelIndex < storyLevels.length) {
-        setTimeout(() => {
-            setCurrentLevel(nextLevelIndex);
-            setPuzzleState({ showDialog: true, level: storyLevels[nextLevelIndex] });
-        }, 1000); // Short delay to see the winning move
-      } else {
-        setGameOverInfo({ status: "You have completed the epic quest!", winner: 'White' });
-      }
-    }
-  }, [gameMode, currentLevel]);
+  }, [game, gameMode, playerColor, isAiThinking, evolutionPrompt, battlePrompt, fen]);
 
   const updateStatus = useCallback(() => {
-    if (gameMode === 'story' && storyLevels[currentLevel]) {
-      setStatus(`Level ${currentLevel + 1}: ${storyLevels[currentLevel].objective}`);
-      return;
+    if (gameMode === 'story' && currentPuzzle) {
+        setStatus(`Level ${currentPuzzleIndex + 1}: ${currentPuzzle.goal}`);
+        return;
     }
-
+    
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
     if (isGameOver) {
       playGameOverSound();
@@ -170,7 +153,39 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       setCheckInfo({ show: true, isCheckmate: false });
     }
     setStatus(newStatus);
-  }, [game, isGameOver, gameMode, currentLevel]);
+  }, [game, isGameOver, gameMode, currentPuzzle, currentPuzzleIndex]);
+
+  const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
+    if (gameMode !== 'story' || !currentPuzzle) return;
+  
+    if (currentPly === currentPuzzle.moves.length) {
+      const isMate = gameInstance.isCheckmate();
+      const goal = currentPuzzle.goal;
+      let puzzleWon = false;
+  
+      if (goal.startsWith('mate-in-') && isMate) {
+        puzzleWon = true;
+      } else if (goal === 'win-material' && !isMate) {
+        // This is a simplification. A true check would involve board evaluation.
+        // For now, completing the sequence is enough.
+        puzzleWon = true;
+      } else if (goal === 'evolve-and-mate' && isMate) {
+        puzzleWon = true;
+      }
+  
+      if (puzzleWon) {
+        const nextLevelIndex = currentPuzzleIndex + 1;
+        if (nextLevelIndex < puzzles.length) {
+          setTimeout(() => {
+            setCurrentPuzzleIndex(nextLevelIndex);
+            setPuzzleState({ showDialog: true, puzzle: puzzles[nextLevelIndex] });
+          }, 1000); // Short delay to see the winning move
+        } else {
+          setGameOverInfo({ status: "You have completed the epic quest!", winner: 'White' });
+        }
+      }
+    }
+  }, [gameMode, currentPuzzle, currentPly, currentPuzzleIndex]);
 
   const executeMove = (from: Square, to: Square, promotion?: PieceSymbol) => {
     const gameCopy = new Chess(game.fen());
@@ -195,13 +210,14 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     }
 
     setLastMove({ from, to });
+
     const wasCapture = !!moveResult.captured;
-    const canEvolve = !!getEvolution(moveResult.piece);
+    const canEvolve = gameMode !== 'story' && !!getEvolution(moveResult.piece);
+    const isAiMove = gameMode === 'vs-ai' && moveResult.color !== playerColor;
 
     setPieceHp(newHpMap);
-    const isAiMove = gameMode === 'vs-ai' && moveResult.color !== playerColor;
     
-    if (wasCapture && canEvolve && (gameMode !== 'story' || storyLevels[currentLevel]?.allowEvolution)) {
+    if (wasCapture && canEvolve && gameMode !== 'story') {
         playCaptureSound();
         if (isAiMove) {
             const newGame = new Chess(gameCopy.fen());
@@ -217,7 +233,6 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
             });
             const newGame = new Chess(gameCopy.fen());
             setGame(newGame);
-            checkPuzzleCompletion(newGame);
         }
     } else {
         if (wasCapture) {
@@ -227,65 +242,83 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         }
         const newGame = new Chess(gameCopy.fen());
         setGame(newGame);
-        checkPuzzleCompletion(newGame);
+        return { game: newGame, move: moveResult };
     }
-    return moveResult;
+    return { game: gameCopy, move: moveResult };
   };
-
+  
   const handleStoryMove = (from: Square, to: Square) => {
-    const gameCopy = new Chess(fen);
+    if (!currentPuzzle) return;
+  
+    let gameCopy = new Chess(game.fen());
+    const nextMoveUci = `${from}${to}`;
+    const expectedMove = currentPuzzle.moves[currentPly];
+    const evolutionForPly = currentPuzzle.evolutions?.find(e => e.ply === currentPly + 1);
+  
+    // Pre-move evolution
+    if (evolutionForPly && evolutionForPly.timing === 'pre') {
+      const piece = gameCopy.get(evolutionForPly.square as Square);
+      if (piece && piece.type === evolutionForPly.from) {
+        gameCopy.put({ type: evolutionForPly.to, color: piece.color }, evolutionForPly.square as Square);
+        playEvolveSound();
+      }
+    }
+  
     const move = gameCopy.move({ from, to });
-    if (!move) return;
+    const uciWithPromotion = `${nextMoveUci}${move?.promotion || ''}`;
 
-    const moveString = `${from}${to}${move.promotion || ''}`;
-    const solutionSource = currentSolutionNode || storyLevels[currentLevel].solution;
-    const nextStep = solutionSource?.[moveString];
-    
-    if (nextStep) {
-        const moveResult = executeMove(from, to, move.promotion);
-        if (!moveResult) return;
-
-        if (typeof nextStep === 'string') {
-            if (nextStep !== 'win') {
-                // This is an opponent's move string, but we are at the end of a branch.
-                // It implies the opponent makes a move, then we need to find the next solution from root.
-                setTimeout(() => {
-                    const opponentMove = nextStep;
-                    const fromSq = opponentMove.slice(0, 2) as Square;
-                    const toSq = opponentMove.slice(2, 4) as Square;
-                    const promotion = opponentMove.length === 5 ? opponentMove.slice(4) as PieceSymbol : undefined;
-                    executeMove(fromSq, toSq, promotion);
-                }, 500);
-                 setCurrentSolutionNode(storyLevels[currentLevel].solution);
-            }
-        } else {
-            // There's a nested object, meaning opponent makes a move, and we get the next part of the solution tree.
-            const opponentMoves = Object.keys(nextStep);
-            if (opponentMoves.length > 0) {
-                 setTimeout(() => {
-                    const opponentMove = opponentMoves[0]; // Assuming one scripted response
-                    const fromSq = opponentMove.slice(0, 2) as Square;
-                    const toSq = opponentMove.slice(2, 4) as Square;
-                    const promotion = opponentMove.length === 5 ? opponentMove.slice(4) as PieceSymbol : undefined;
-                    executeMove(fromSq, toSq, promotion);
-                    setCurrentSolutionNode(nextStep[opponentMove]);
-                }, 500);
-            }
+    if (uciWithPromotion === expectedMove) {
+      let finalGame = new Chess(gameCopy.fen());
+  
+      // Post-move evolution
+      if (evolutionForPly && evolutionForPly.timing === 'post') {
+        const piece = finalGame.get(to);
+        if (piece && piece.type === evolutionForPly.from) {
+          finalGame.put({ type: evolutionForPly.to, color: piece.color }, to);
+          playEvolveSound();
         }
+      }
+  
+      setGame(finalGame);
+      setLastMove({ from, to });
+      setCurrentPly(prev => prev + 1);
+  
+      // Check for opponent's move in the sequence
+      const opponentPly = currentPly + 1;
+      if (opponentPly < currentPuzzle.moves.length) {
+        const opponentMoveUci = currentPuzzle.moves[opponentPly];
+        const fromSq = opponentMoveUci.slice(0, 2) as Square;
+        const toSq = opponentMoveUci.slice(2, 4) as Square;
+        const promotion = opponentMoveUci.length === 5 ? opponentMoveUci.slice(4) as PieceSymbol : undefined;
+        
+        setTimeout(() => {
+          const finalGameWithOpponentMove = new Chess(finalGame.fen());
+          finalGameWithOpponentMove.move({ from: fromSq, to: toSq, promotion });
+          setGame(finalGameWithOpponentMove);
+          setLastMove({ from: fromSq, to: toSq });
+          setCurrentPly(prev => prev + 1);
+          checkPuzzleCompletion(finalGameWithOpponentMove);
+        }, 500);
+      } else {
+          checkPuzzleCompletion(finalGame);
+      }
+  
     } else {
-        const newLives = lives - 1;
-        setLives(newLives);
-        if (newLives <= 0) {
-            setShowPuzzleFailure(true);
-        } else {
-            toast({
-                title: "Incorrect Move!",
-                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
-                variant: "destructive"
-            });
-        }
+      const newLives = lives - 1;
+      setLives(newLives);
+      if (newLives <= 0) {
+        setShowPuzzleFailure(true);
+      } else {
+        toast({
+          title: "Incorrect Move!",
+          description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
+          variant: "destructive"
+        });
+        // Board is not changed, providing a reset effect
+      }
     }
   };
+
 
   const handleMove = useCallback((from: Square, to: Square) => {
     if (isGameOver || isAiThinking || evolutionPrompt || battlePrompt) return;
@@ -300,7 +333,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     
     if (!move) return;
 
-    if (move.captured) {
+    if (move.captured && gameMode !== 'story') {
         const attackerPiece = game.get(move.from);
         const defenderPiece = game.get(move.to);
 
@@ -331,7 +364,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     } else {
         executeMove(from, to, move.promotion);
     }
-  }, [game, isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, pieceHp, recentlyUsedDialogue, fen, currentSolutionNode, lives, toast, handleStoryMove]);
+  }, [game, isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, pieceHp, recentlyUsedDialogue, fen, lives, toast, handleStoryMove, currentPuzzle, currentPly, checkPuzzleCompletion]);
   
   const playRandomMove = useCallback(() => {
     const moves = game.moves({verbose: true});
@@ -406,7 +439,6 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     setTimeout(() => setShiningPiece(null), 2000); // Shine duration
     const newGame = new Chess(gameCopy.fen());
     setGame(newGame);
-    checkPuzzleCompletion(newGame);
   };
 
   const handleRoll = () => {
@@ -447,7 +479,6 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         gameCopy.load(tokens.join(" "));
         setGame(gameCopy);
         playMoveSound();
-        checkPuzzleCompletion(gameCopy);
       }
 
       setBattlePrompt(null);
@@ -471,7 +502,6 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     setGame(newGame);
     
     if (gameMode === 'vs-ai') {
-      // Player color alternates in vs-ai mode on new game for variety
       const newPlayerColor = playerColor === 'w' ? 'b' : 'w';
       setPlayerColor(newPlayerColor);
     } else {
@@ -502,32 +532,39 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     setIsAiThinking(false);
     setShiningPiece(null);
     setCheckInfo({ show: false, isCheckmate: false });
-    setCurrentLevel(0);
-    setPuzzleState({ showDialog: false, level: null });
+    setCurrentPuzzleIndex(0);
+    setPuzzleState({ showDialog: false, puzzle: null });
     setShowPuzzleFailure(false);
 
     if (gameMode === 'story') {
-        const firstLevel = storyLevels[0];
-        setPuzzleState({ showDialog: true, level: firstLevel });
+        const firstPuzzle = puzzles[0];
+        setPuzzleState({ showDialog: true, puzzle: firstPuzzle });
     }
 
   }, [gameMode, playerColor]);
 
   const startPuzzle = () => {
-    const level = storyLevels[currentLevel];
-    if (!level) return;
-    const newGame = new Chess(level.fen);
+    const puzzle = puzzles[currentPuzzleIndex];
+    if (!puzzle) return;
+    const newGame = new Chess(puzzle.fen);
+    const turn = newGame.turn();
     setGame(newGame);
-    setPieceHp(level.hpMap ?? {});
-    setPlayerColor(level.playerColor);
-    setLives(level.lives);
-    setCurrentSolutionNode(level.solution);
-    setPuzzleState({ showDialog: false, level: null });
+    setPieceHp({}); // Puzzles don't use HP
+    setPlayerColor(turn);
+    setLives(puzzle.lives ?? 3);
+    setCurrentPly(0);
+    setPuzzleState({ showDialog: false, puzzle: null });
   };
 
   useEffect(() => {
     handleNewGame();
   }, [gameMode, handleNewGame]);
+
+  useEffect(() => {
+    if(gameMode === 'story') {
+      checkPuzzleCompletion(game);
+    }
+  }, [fen, gameMode, checkPuzzleCompletion]);
 
 
   const handleRematch = () => {
@@ -544,26 +581,32 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
 
   const showHint = () => {
     if (gameMode !== 'story') return;
-    const level = storyLevels[currentLevel];
-    if (level) {
+    const puzzle = puzzles[currentPuzzleIndex];
+    if (puzzle && puzzle.hint) {
         toast({
-            title: "Hint",
-            description: level.hint,
+            title: `Hint for Level ${currentPuzzleIndex + 1}`,
+            description: puzzle.hint,
+        });
+    } else {
+       toast({
+            title: "No Hint Available",
+            description: "Keep trying, you can solve it!",
         });
     }
   };
 
   const restartPuzzle = () => {
     setShowPuzzleFailure(false);
-    const level = storyLevels[currentLevel];
-    if (!level) return;
-    const newGame = new Chess(level.fen);
+    const puzzle = puzzles[currentPuzzleIndex];
+    if (!puzzle) return;
+    const newGame = new Chess(puzzle.fen);
+    const turn = newGame.turn();
+
     setGame(newGame);
-    setPieceHp(level.hpMap ?? {});
-    setPlayerColor(level.playerColor);
-    setLives(level.lives);
-    setCurrentSolutionNode(level.solution);
-    setPuzzleState({ showDialog: false, level: null });
+    setPieceHp({});
+    setPlayerColor(turn);
+    setLives(puzzle.lives ?? 3);
+    setCurrentPly(0);
   }
 
 
@@ -607,7 +650,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
                     <Users /> Player vs. Player
                   </div>
                 )}
-                 {gameMode === 'story' && storyLevels[currentLevel] && (
+                 {gameMode === 'story' && puzzles[currentPuzzleIndex] && (
                     <div className="flex flex-col gap-2 text-lg font-semibold p-2 rounded-md bg-secondary/50">
                         <div className="flex items-center justify-center gap-2">
                            <BookOpen /> Story Mode
@@ -692,11 +735,11 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         />
       )}
 
-      {puzzleState.showDialog && puzzleState.level && (
+      {puzzleState.showDialog && puzzleState.puzzle && (
         <PuzzleDialog
             open={puzzleState.showDialog}
-            level={puzzleState.level}
-            levelNumber={currentLevel + 1}
+            puzzle={puzzleState.puzzle}
+            levelNumber={currentPuzzleIndex + 1}
             onStart={startPuzzle}
         />
       )}
