@@ -98,7 +98,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
   const [gameOverInfo, setGameOverInfo] = useState<GameOverInfo | null>(null);
   const [lastMove, setLastMove] = useState<{ from: Square, to: Square } | null>(null);
   const [shiningPiece, setShiningPiece] = useState<Square | null>(null);
-  const [checkInfo, setCheckInfo] = useState<{ show: boolean, isCheckmate: boolean }>({ show: false, isCheckmate: false });
+  const [showCheckDialog, setShowCheckDialog] = useState(false);
   const [currentPuzzleIndex, setCurrentPuzzleIndex] = useState(0);
   const [puzzleState, setPuzzleState] = useState<{ showDialog: boolean; puzzle: Puzzle | null }>({ showDialog: false, puzzle: null });
   const [lives, setLives] = useState(3);
@@ -112,6 +112,8 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
   const isGameOver = useMemo(() => game.isGameOver(), [fen]);
   const validMoves = useMemo(() => game.moves({ verbose: true }) as Move[], [fen]);
   const currentPuzzle = useMemo(() => gameMode === 'story' ? puzzles[currentPuzzleIndex] : null, [gameMode, currentPuzzleIndex]);
+  const isCheckmate = useMemo(() => game.isCheckmate(), [fen]);
+
 
   const isPlayerTurn = useMemo(() => {
     if (isAiThinking || evolutionPrompt || battlePrompt) return false;
@@ -156,13 +158,11 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
   
   // This effect specifically handles showing the "Check" dialog to avoid re-render loops.
   useEffect(() => {
-    const inCheck = game.inCheck();
-    const isCheckmate = game.isCheckmate();
-    if (inCheck && !checkInfo.show) {
-      playCheckSound();
-      setCheckInfo({ show: true, isCheckmate });
+    if (game.inCheck()) {
+        playCheckSound();
+        setShowCheckDialog(true);
     }
-  }, [fen, game, checkInfo.show]);
+  }, [fen, game]);
 
   const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
     if (gameMode !== 'story' || !currentPuzzle) return;
@@ -512,7 +512,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       setGameOverInfo(null);
       setIsAiThinking(false);
       setShiningPiece(null);
-      setCheckInfo({ show: false, isCheckmate: false });
+      setShowCheckDialog(false);
       setCurrentPuzzleIndex(0);
       setPuzzleState({ showDialog: false, puzzle: null });
       setShowPuzzleFailure(false);
@@ -767,11 +767,11 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
             </AlertDialog>
         )}
 
-      {checkInfo.show && (
+      {showCheckDialog && (
         <CheckDialog
-          open={checkInfo.show}
-          isCheckmate={checkInfo.isCheckmate}
-          onClose={() => setCheckInfo({ show: false, isCheckmate: false })}
+          open={showCheckDialog}
+          isCheckmate={isCheckmate}
+          onClose={() => setShowCheckDialog(false)}
         />
       )}
       
