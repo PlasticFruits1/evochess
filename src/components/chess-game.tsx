@@ -474,7 +474,16 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       if (!battlePrompt || !diceResult) return;
       
       if (diceResult.remainingHp <= 0) {
-        executeMove(battlePrompt.move.from, battlePrompt.move.to, battlePrompt.move.promotion);
+        // Check if the captured piece is a king before executing the move
+        const defenderPiece = game.get(battlePrompt.move.to);
+        if (defenderPiece?.type === 'k') {
+            playCaptureSound();
+            const winner = battlePrompt.attacker.color;
+            const status = `The ${winner === 'White' ? 'Black' : 'White'} King has been defeated! ${winner} wins.`;
+            setGameOverInfo({ status, winner });
+        } else {
+          executeMove(battlePrompt.move.from, battlePrompt.move.to, battlePrompt.move.promotion);
+        }
       } else {
         const gameCopy = new Chess(game.fen());
         const tokens = gameCopy.fen().split(" ");
@@ -808,5 +817,7 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
+    
 
     
