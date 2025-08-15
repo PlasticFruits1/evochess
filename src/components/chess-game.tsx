@@ -133,7 +133,6 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         const winner = game.turn() === 'w' ? 'Black' : 'White';
         newStatus = `Checkmate! ${winner} wins.`;
         setGameOverInfo({ status: newStatus, winner });
-        setCheckInfo({ show: true, isCheckmate: true });
       } else if (game.isDraw()) {
         newStatus = "Draw!";
         setGameOverInfo({ status: newStatus, winner: 'Draw' });
@@ -157,11 +156,11 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
   
   // This effect specifically handles showing the "Check" dialog to avoid re-render loops.
   useEffect(() => {
-    if (game.inCheck() && !game.isGameOver()) {
-      if (!checkInfo.show) {
-        playCheckSound();
-        setCheckInfo({ show: true, isCheckmate: false });
-      }
+    const inCheck = game.inCheck();
+    const isCheckmate = game.isCheckmate();
+    if (inCheck && !checkInfo.show) {
+      playCheckSound();
+      setCheckInfo({ show: true, isCheckmate });
     }
   }, [fen, game, checkInfo.show]);
 
@@ -275,9 +274,8 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     const expectedPromotion = expectedMove.length === 5 ? expectedMove[4] as PieceSymbol : undefined;
     
     let uciWithPromotion = `${from}${to}`;
-    if (isPromotion) {
-        // For puzzles, we assume the intended promotion is the one in the solution
-        uciWithPromotion = expectedMove;
+    if (isPromotion && expectedPromotion) {
+        uciWithPromotion += expectedPromotion;
     }
   
     if (uciWithPromotion === expectedMove) {
@@ -777,7 +775,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         />
       )}
       
-      {gameOverInfo && !checkInfo.isCheckmate && (
+      {gameOverInfo && (
         <GameOverDialog
           open={!!gameOverInfo}
           status={gameOverInfo.status}
