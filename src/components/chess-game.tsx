@@ -24,7 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { type Move, type Square } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
-import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 
 type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert' | 'Grandmaster';
 type EvolutionPromptInfo = { from: Square; to: Square; piece: PieceSymbol, color: Color, captured: PieceSymbol | undefined };
@@ -104,6 +104,8 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
   const [lives, setLives] = useState(3);
   const [currentPly, setCurrentPly] = useState(0);
   const [showPuzzleFailure, setShowPuzzleFailure] = useState(false);
+  const [showHintDialog, setShowHintDialog] = useState(false);
+
   const { toast } = useToast();
 
   const fen = game.fen();
@@ -149,22 +151,38 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       }
     } else if (game.inCheck()) {
       newStatus = `Check! ${newStatus}`;
-      if (!checkInfo.show) { // Add this check to prevent re-opening the dialog
+    }
+    setStatus(newStatus);
+  }, [game, gameMode, currentPuzzle, currentPuzzleIndex]);
+  
+  // This effect specifically handles showing the "Check" dialog to avoid re-render loops.
+  useEffect(() => {
+    if (game.inCheck() && !game.isGameOver()) {
+      if (!checkInfo.show) {
         playCheckSound();
         setCheckInfo({ show: true, isCheckmate: false });
       }
     }
-    setStatus(newStatus);
-  }, [game, gameMode, currentPuzzle, currentPuzzleIndex, checkInfo.show]);
+  }, [fen, game, checkInfo.show]);
 
   const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
     if (gameMode !== 'story' || !currentPuzzle) return;
   
-    const isMate = gameInstance.isCheckmate();
     let puzzleWon = false;
-  
-    if (currentPly >= currentPuzzle.moves.length && isMate) {
+    
+    // Check if the current move is the last move of the puzzle
+    if (currentPly === currentPuzzle.moves.length) {
+      if (currentPuzzle.goal.startsWith("mate-in-")) {
+        puzzleWon = gameInstance.isCheckmate();
+      } else if (currentPuzzle.goal === "win-material") {
+        // A simple check could be if the last move was a capture.
+        // A more robust check might compare material balance before and after.
+        const lastMove = gameInstance.history({verbose: true}).pop();
+        puzzleWon = !!lastMove?.captured;
+      } else {
+        // For general goals, we can assume completing the sequence is winning.
         puzzleWon = true;
+      }
     }
 
     if (puzzleWon) {
@@ -183,6 +201,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       }
     }
   }, [gameMode, currentPuzzle, currentPly, currentPuzzleIndex, toast]);
+  
   
   const executeMove = (from: Square, to: Square, promotion?: PieceSymbol) => {
     const gameCopy = new Chess(game.fen());
@@ -247,87 +266,60 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
   const handleStoryMove = useCallback((from: Square, to: Square) => {
     if (!currentPuzzle) return;
   
-    const gameCopy = new Chess(game.fen());
-    const piece = gameCopy.get(from);
+    const piece = game.get(from);
     if (!piece) return;
   
-    const nextMoveUci = `${from}${to}`;
+    // Determine if the move is a promotion
     const isPromotion = piece.type === 'p' && (to[1] === '8' || to[1] === '1');
     const expectedMove = currentPuzzle.moves[currentPly];
-  
-    // Handle promotions in the expected move string (e.g., 'e7e8q')
-    const expectedUci = expectedMove.slice(0, 4);
     const expectedPromotion = expectedMove.length === 5 ? expectedMove[4] as PieceSymbol : undefined;
-  
-    let playerMove = nextMoveUci;
-    let promotionPiece = expectedPromotion; // Assume promotion if expected
-  
-    // If it's a promotion, but the expected move doesn't specify a piece, default to queen
-    if (isPromotion && !expectedPromotion) {
-        promotionPiece = 'q';
-        playerMove += 'q';
-    } else if (isPromotion && expectedPromotion) {
-        playerMove += expectedPromotion;
+    
+    let uciWithPromotion = `${from}${to}`;
+    if (isPromotion) {
+        // For puzzles, we assume the intended promotion is the one in the solution
+        uciWithPromotion = expectedMove;
     }
   
-    if (playerMove === expectedMove) {
-      const moveResult = gameCopy.move({ from, to, promotion: promotionPiece });
-      
-      if (!moveResult) {
-        console.error("Story mode move failed validation despite passing check:", expectedMove);
-        return;
-      }
-  
-      const gameAfterPlayerMove = new Chess(gameCopy.fen());
-      setGame(gameAfterPlayerMove);
-      setLastMove({ from, to });
-      playMoveSound();
-      const newPly = currentPly + 1;
-      setCurrentPly(newPly);
-  
-      // Check for puzzle completion after player's move
-      if (newPly >= currentPuzzle.moves.length) {
-        checkPuzzleCompletion(gameAfterPlayerMove);
-        return;
-      }
-  
-      // Execute opponent's scripted move if there is one
-      const opponentPly = newPly;
-      if (opponentPly < currentPuzzle.moves.length) {
-        const opponentMoveUci = currentPuzzle.moves[opponentPly];
-        const fromSq = opponentMoveUci.slice(0, 2) as Square;
-        const toSq = opponentMoveUci.slice(2, 4) as Square;
-        const promotion = opponentMoveUci.length === 5 ? opponentMoveUci.slice(4) as PieceSymbol : undefined;
+    if (uciWithPromotion === expectedMove) {
+        const moveResult = executeMove(from, to, expectedPromotion);
+        if (!moveResult) return;
         
-        setTimeout(() => {
-          const gameAfterOpponentMove = new Chess(gameAfterPlayerMove.fen());
-          const opponentMoveResult = gameAfterOpponentMove.move({ from: fromSq, to: toSq, promotion });
-          if (!opponentMoveResult) {
-            console.error("Invalid opponent move in puzzle", { puzzleId: currentPuzzle.id, move: opponentMoveUci });
-            return;
-          }
-          setGame(gameAfterOpponentMove);
-          setLastMove({ from: fromSq, to: toSq });
-          playMoveSound();
-          const finalPly = opponentPly + 1;
-          setCurrentPly(finalPly);
-          
-          // Check for completion after opponent's move
-          checkPuzzleCompletion(gameAfterOpponentMove);
-        }, 750);
-      }
+        const gameAfterPlayerMove = moveResult.game;
+        const newPly = currentPly + 1;
+        setCurrentPly(newPly);
+  
+        // Check for puzzle completion after player's move
+        checkPuzzleCompletion(gameAfterPlayerMove);
+  
+        // Execute opponent's scripted move if there is one
+        if (newPly < currentPuzzle.moves.length) {
+            const opponentMoveUci = currentPuzzle.moves[newPly];
+            const fromSq = opponentMoveUci.slice(0, 2) as Square;
+            const toSq = opponentMoveUci.slice(2, 4) as Square;
+            const oppPromotion = opponentMoveUci.length === 5 ? opponentMoveUci.slice(4) as PieceSymbol : undefined;
+            
+            setTimeout(() => {
+                const opponentMoveResult = executeMove(fromSq, toSq, oppPromotion);
+                if (opponentMoveResult) {
+                    const finalPly = newPly + 1;
+                    setCurrentPly(finalPly);
+                    // Check for completion after opponent's move
+                    checkPuzzleCompletion(opponentMoveResult.game);
+                }
+            }, 750);
+        }
     } else {
-      const newLives = lives - 1;
-      setLives(newLives);
-      if (newLives <= 0) {
-        setShowPuzzleFailure(true);
-      } else {
-        toast({
-          title: "Incorrect Move!",
-          description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
-          variant: "destructive"
-        });
-      }
+        const newLives = lives - 1;
+        setLives(newLives);
+        if (newLives <= 0) {
+            setShowPuzzleFailure(true);
+        } else {
+            toast({
+                title: "Incorrect Move!",
+                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
+                variant: "destructive"
+            });
+        }
     }
   }, [currentPly, currentPuzzle, game, lives, toast, checkPuzzleCompletion]);
   
@@ -345,7 +337,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     
     if (!move) return;
 
-    if (move.captured) {
+    if (move.captured && gameMode !== 'story') {
         const attackerPiece = game.get(move.from);
         const defenderPiece = game.get(move.to);
 
@@ -429,7 +421,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       const timer = setTimeout(() => triggerAiMove(fen), 500);
       return () => clearTimeout(timer);
     }
-  }, [fen, gameMode, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, battlePrompt]);
+  }, [fen, gameMode, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, battlePrompt, updateStatus]);
 
 
   const applyEvolution = (to: Square, piece: PieceSymbol, color: Color) => {
@@ -526,6 +518,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       setCurrentPuzzleIndex(0);
       setPuzzleState({ showDialog: false, puzzle: null });
       setShowPuzzleFailure(false);
+      setShowHintDialog(false);
       setCurrentPly(0);
   }, []);
 
@@ -578,11 +571,6 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     handleNewGame();
   }, [gameMode, handleNewGame]);
 
-  useEffect(() => {
-    updateStatus();
-  }, [fen, updateStatus]);
-
-
   const handleRematch = () => {
     handleNewGame();
   };
@@ -599,10 +587,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     if (gameMode !== 'story') return;
     const puzzle = puzzles[currentPuzzleIndex];
     if (puzzle && puzzle.hint) {
-        toast({
-            title: `Hint for Level ${currentPuzzleIndex + 1}`,
-            description: puzzle.hint,
-        });
+        setShowHintDialog(true);
     } else {
        toast({
             title: "No Hint Available",
@@ -751,16 +736,33 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         />
       )}
 
+      {showHintDialog && currentPuzzle && (
+          <AlertDialog open={showHintDialog} onOpenChange={setShowHintDialog}>
+              <AlertDialogContent>
+                  <AlertDialogHeader>
+                      <AlertDialogTitle>Hint for: {currentPuzzle.title}</AlertDialogTitle>
+                      <AlertDialogDescription>
+                          {currentPuzzle.hint}
+                      </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                      <AlertDialogAction onClick={() => setShowHintDialog(false)}>Got it!</AlertDialogAction>
+                  </AlertDialogFooter>
+              </AlertDialogContent>
+          </AlertDialog>
+      )}
+
        {showPuzzleFailure && (
             <AlertDialog open={showPuzzleFailure}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
                         <AlertDialogTitle>Challenge Failed</AlertDialogTitle>
                         <AlertDialogDescription>
-                            You've run out of lives for this challenge. Would you like to try again?
+                            You've run out of lives for this challenge. Would you like to try again or return to the main menu?
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => window.location.reload()}>Main Menu</AlertDialogCancel>
                         <AlertDialogAction onClick={restartPuzzle}>Restart Challenge</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
@@ -808,3 +810,5 @@ function pieceToUnicode(piece: PieceSymbol, color: Color) {
     };
     return color === 'w' ? unicode : blackUnicodeMap[unicode];
 }
+
+    
