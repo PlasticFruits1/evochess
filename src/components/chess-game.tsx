@@ -125,7 +125,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     }
     
     let newStatus = game.turn() === 'w' ? "White's turn." : "Black's turn.";
-    if (isGameOver) {
+    if (game.isGameOver()) {
       playGameOverSound();
       if (game.isCheckmate()) {
         const winner = game.turn() === 'w' ? 'Black' : 'White';
@@ -149,11 +149,13 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       }
     } else if (game.inCheck()) {
       newStatus = `Check! ${newStatus}`;
-      playCheckSound();
-      setCheckInfo({ show: true, isCheckmate: false });
+      if (!checkInfo.show) { // Add this check to prevent re-opening the dialog
+        playCheckSound();
+        setCheckInfo({ show: true, isCheckmate: false });
+      }
     }
     setStatus(newStatus);
-  }, [game, isGameOver, gameMode, currentPuzzle, currentPuzzleIndex]);
+  }, [game, gameMode, currentPuzzle, currentPuzzleIndex, checkInfo.show]);
 
   const checkPuzzleCompletion = useCallback((gameInstance: Chess) => {
     if (gameMode !== 'story' || !currentPuzzle) return;
@@ -166,6 +168,10 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     }
 
     if (puzzleWon) {
+      toast({
+        title: `Level ${currentPuzzleIndex + 1} Complete!`,
+        description: "Well done! On to the next challenge.",
+      });
       const nextLevelIndex = currentPuzzleIndex + 1;
       if (nextLevelIndex < puzzles.length) {
         setTimeout(() => {
@@ -176,7 +182,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
         setGameOverInfo({ status: "Congratulations! You have completed all challenges!", winner: 'White' });
       }
     }
-  }, [gameMode, currentPuzzle, currentPly, currentPuzzleIndex]);
+  }, [gameMode, currentPuzzle, currentPly, currentPuzzleIndex, toast]);
   
   const executeMove = (from: Square, to: Square, promotion?: PieceSymbol) => {
     const gameCopy = new Chess(game.fen());
@@ -237,83 +243,94 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     }
     return { game: gameCopy, move: moveResult };
   };
-
-  const handleStoryMove = (from: Square, to: Square) => {
+  
+  const handleStoryMove = useCallback((from: Square, to: Square) => {
     if (!currentPuzzle) return;
-
+  
     const gameCopy = new Chess(game.fen());
     const piece = gameCopy.get(from);
+    if (!piece) return;
+  
     const nextMoveUci = `${from}${to}`;
-    
-    // Determine if the move is a promotion
     const isPromotion = piece.type === 'p' && (to[1] === '8' || to[1] === '1');
     const expectedMove = currentPuzzle.moves[currentPly];
-    
-    // Check if the player's move matches the current step in the solution
-    const isCorrectMove = isPromotion 
-        ? nextMoveUci + (expectedMove.length === 5 ? expectedMove[4] : '') === expectedMove
-        : nextMoveUci === expectedMove;
-
-    if (isCorrectMove) {
-        const promotionPiece = expectedMove.length === 5 ? expectedMove[4] as PieceSymbol : undefined;
-        const moveResult = gameCopy.move({ from, to, promotion: promotionPiece });
-      
-        if (!moveResult) {
-            console.error("Story mode move failed validation despite passing check:", expectedMove);
-            return;
-        }
-
-        const gameAfterPlayerMove = new Chess(gameCopy.fen());
-        setGame(gameAfterPlayerMove);
-        setLastMove({ from, to });
-        const newPly = currentPly + 1;
-        setCurrentPly(newPly);
   
-        // Check for puzzle completion after player's move
-        if (newPly >= currentPuzzle.moves.length) {
-            checkPuzzleCompletion(gameAfterPlayerMove);
-            return;
-        }
-
-        // Execute opponent's scripted move if there is one
-        const opponentPly = newPly;
-        if (opponentPly < currentPuzzle.moves.length) {
-            const opponentMoveUci = currentPuzzle.moves[opponentPly];
-            const fromSq = opponentMoveUci.slice(0, 2) as Square;
-            const toSq = opponentMoveUci.slice(2, 4) as Square;
-            const promotion = opponentMoveUci.length === 5 ? opponentMoveUci.slice(4) as PieceSymbol : undefined;
-            
-            setTimeout(() => {
-                const gameAfterOpponentMove = new Chess(gameAfterPlayerMove.fen());
-                gameAfterOpponentMove.move({ from: fromSq, to: toSq, promotion });
-                setGame(gameAfterOpponentMove);
-                setLastMove({ from: fromSq, to: toSq });
-                const finalPly = opponentPly + 1;
-                setCurrentPly(finalPly);
-                
-                // Check for completion after opponent's move
-                if (finalPly >= currentPuzzle.moves.length) {
-                    checkPuzzleCompletion(gameAfterOpponentMove);
-                }
-
-            }, 750);
-        }
+    // Handle promotions in the expected move string (e.g., 'e7e8q')
+    const expectedUci = expectedMove.slice(0, 4);
+    const expectedPromotion = expectedMove.length === 5 ? expectedMove[4] as PieceSymbol : undefined;
   
-    } else {
-        const newLives = lives - 1;
-        setLives(newLives);
-        if (newLives <= 0) {
-            setShowPuzzleFailure(true);
-        } else {
-            toast({
-                title: "Incorrect Move!",
-                description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
-                variant: "destructive"
-            });
-        }
+    let playerMove = nextMoveUci;
+    let promotionPiece = expectedPromotion; // Assume promotion if expected
+  
+    // If it's a promotion, but the expected move doesn't specify a piece, default to queen
+    if (isPromotion && !expectedPromotion) {
+        promotionPiece = 'q';
+        playerMove += 'q';
+    } else if (isPromotion && expectedPromotion) {
+        playerMove += expectedPromotion;
     }
-  };
-
+  
+    if (playerMove === expectedMove) {
+      const moveResult = gameCopy.move({ from, to, promotion: promotionPiece });
+      
+      if (!moveResult) {
+        console.error("Story mode move failed validation despite passing check:", expectedMove);
+        return;
+      }
+  
+      const gameAfterPlayerMove = new Chess(gameCopy.fen());
+      setGame(gameAfterPlayerMove);
+      setLastMove({ from, to });
+      playMoveSound();
+      const newPly = currentPly + 1;
+      setCurrentPly(newPly);
+  
+      // Check for puzzle completion after player's move
+      if (newPly >= currentPuzzle.moves.length) {
+        checkPuzzleCompletion(gameAfterPlayerMove);
+        return;
+      }
+  
+      // Execute opponent's scripted move if there is one
+      const opponentPly = newPly;
+      if (opponentPly < currentPuzzle.moves.length) {
+        const opponentMoveUci = currentPuzzle.moves[opponentPly];
+        const fromSq = opponentMoveUci.slice(0, 2) as Square;
+        const toSq = opponentMoveUci.slice(2, 4) as Square;
+        const promotion = opponentMoveUci.length === 5 ? opponentMoveUci.slice(4) as PieceSymbol : undefined;
+        
+        setTimeout(() => {
+          const gameAfterOpponentMove = new Chess(gameAfterPlayerMove.fen());
+          const opponentMoveResult = gameAfterOpponentMove.move({ from: fromSq, to: toSq, promotion });
+          if (!opponentMoveResult) {
+            console.error("Invalid opponent move in puzzle", { puzzleId: currentPuzzle.id, move: opponentMoveUci });
+            return;
+          }
+          setGame(gameAfterOpponentMove);
+          setLastMove({ from: fromSq, to: toSq });
+          playMoveSound();
+          const finalPly = opponentPly + 1;
+          setCurrentPly(finalPly);
+          
+          // Check for completion after opponent's move
+          checkPuzzleCompletion(gameAfterOpponentMove);
+        }, 750);
+      }
+    } else {
+      const newLives = lives - 1;
+      setLives(newLives);
+      if (newLives <= 0) {
+        setShowPuzzleFailure(true);
+      } else {
+        toast({
+          title: "Incorrect Move!",
+          description: `That's not the right path. ${newLives} ${newLives === 1 ? 'life' : 'lives'} remaining.`,
+          variant: "destructive"
+        });
+      }
+    }
+  }, [currentPly, currentPuzzle, game, lives, toast, checkPuzzleCompletion]);
+  
 
   const handleMove = useCallback((from: Square, to: Square) => {
     if (isGameOver || isAiThinking || evolutionPrompt || battlePrompt) return;
@@ -359,7 +376,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     } else {
         executeMove(from, to, move.promotion);
     }
-  }, [game.fen(), isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, pieceHp, recentlyUsedDialogue, lives, toast, handleStoryMove, currentPuzzle, currentPly, checkPuzzleCompletion]);
+  }, [game.fen(), isGameOver, isAiThinking, evolutionPrompt, battlePrompt, gameMode, pieceHp, recentlyUsedDialogue, handleStoryMove]);
   
   const playRandomMove = useCallback(() => {
     const moves = game.moves({verbose: true});
@@ -412,7 +429,7 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       const timer = setTimeout(() => triggerAiMove(fen), 500);
       return () => clearTimeout(timer);
     }
-  }, [fen, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, battlePrompt, updateStatus, gameMode]);
+  }, [fen, gameMode, playerColor, isGameOver, triggerAiMove, isAiThinking, evolutionPrompt, battlePrompt]);
 
 
   const applyEvolution = (to: Square, piece: PieceSymbol, color: Color) => {
@@ -512,6 +529,19 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
       setCurrentPly(0);
   }, []);
 
+  const startPuzzle = useCallback(() => {
+    const puzzle = puzzles[currentPuzzleIndex];
+    if (!puzzle) return;
+    const newGame = new Chess(puzzle.fen);
+    const turn = newGame.turn();
+    setGame(newGame);
+    setPieceHp({}); // Puzzles don't use HP
+    setPlayerColor(turn);
+    setLives(puzzle.lives ?? 3);
+    setCurrentPly(0);
+    setPuzzleState({ showDialog: false, puzzle: null });
+  }, [currentPuzzleIndex]);
+
   const handleNewGame = useCallback(() => {
     resetGameState();
     
@@ -543,20 +573,6 @@ export default function ChessGame({ initialGameMode }: ChessGameProps) {
     }
 
   }, [gameMode, playerColor, resetGameState]);
-
-  const startPuzzle = () => {
-    const puzzle = puzzles[currentPuzzleIndex];
-    if (!puzzle) return;
-    const newGame = new Chess(puzzle.fen);
-    const turn = newGame.turn();
-    setGame(newGame);
-    setPieceHp({}); // Puzzles don't use HP
-    setPlayerColor(turn);
-    setLives(puzzle.lives ?? 3);
-    setCurrentPly(0);
-    setPuzzleState({ showDialog: false, puzzle: null });
-    updateStatus();
-  };
 
   useEffect(() => {
     handleNewGame();
