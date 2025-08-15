@@ -1,25 +1,3 @@
-// Evolving Chess Puzzle Pack
-// Schema + 150 puzzles curated for the "evolving pieces" ruleset
-// Evolution chain: pawn->knight, knight->bishop, bishop->rook, rook->queen
-// Representation rules in this file:
-//  - fen: Standard FEN to set up the initial board.
-//  - moves: Array of UCI strings that your engine executes in order.
-//  - evolutions (optional): one or more transformations that occur at a specific ply.
-//      * ply: 1-based index into the moves array (1 is the first move in `moves`).
-//      * square: the origin square of the piece that evolves on that ply (in UCI, before the move is made).
-//      * from: current role of the evolving piece ("p" | "n" | "b" | "r").
-//      * to: next role after evolution ("n" | "b" | "r" | "q").
-//      * timing: "pre" | "post" — whether evolution happens before or after the ply's UCI move is applied.
-//        (Most puzzles use "pre" if the evolution is needed to make the move legal.)
-//  - goal: short descriptor of the task ("mate-in-1", "mate-in-2", "mate-in-3", "win-material", "evolve-and-mate").
-//  - tags: quick labels you can use for filtering in your UI.
-//
-// Notes for custom rules integration
-// ---------------------------------
-// • If an evolution is marked timing:"pre", treat it as happening immediately before executing moves[ply-1].
-// • If timing:"post", apply the move first, then evolve the piece that now occupies `toSquare` of the move.
-// • These puzzles are designed so that without the specified evolution(s), the lines would be illegal or
-//   fail to achieve the goal — highlighting the new rules in a fun way.
 
 import type { PieceSymbol } from "./types";
 
@@ -27,236 +5,369 @@ export type Role = "p" | "n" | "b" | "r";
 export type PromoRole = "n" | "b" | "r" | "q";
 
 export interface EvolutionStep {
-  ply: number; // 1-based index into `moves`
-  square: string; // algebraic square of the piece BEFORE the ply (for timing:"pre")
+  ply: number;
+  square: string;
   from: Role;
-  to: PromoRole; // must follow the chain p->n->b->r->q
+  to: PromoRole;
   timing: "pre" | "post";
 }
 
 export interface Puzzle {
   id: number;
   fen: string;
-  moves: string[]; // UCI moves, no comments
+  moves: string[]; // UCI moves
   evolutions?: EvolutionStep[];
-  goal: "mate-in-1" | "mate-in-2" | "mate-in-3" | "win-material" | "evolve-and-mate";
+  goal: string;
   tags: string[];
   narrative?: string;
   hint?: string;
-  playerColor?: 'w' | 'b';
   lives?: number;
   title?: string;
 }
 
 export const puzzles: Puzzle[] = [
-  // -----------------------------
-  // SECTION A — Classic mates-in-1 (no evolution needed)
-  // Clean, bite-size positions to warm up players on the UI + UCI flow.
-  // -----------------------------
-  { id: 1, fen: "6k1/8/8/8/8/8/5Q2/6K1 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["classic","queen","back-rank"] }, // Qf8#
-  { id: 2, fen: "6k1/8/8/8/8/8/6Q1/6K1 w - - 0 1", moves: ["g2g7"], goal: "mate-in-1", tags: ["classic","queen"] }, // Qg7#
-  { id: 3, fen: "6k1/8/8/8/8/8/5Q2/5K2 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 4, fen: "6k1/8/8/8/8/8/5Q2/4K3 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 5, fen: "6k1/8/8/8/8/8/4Q3/6K1 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 6, fen: "6k1/8/8/8/8/8/3Q4/6K1 w - - 0 1", moves: ["d2d8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 7, fen: "6k1/8/8/8/8/8/2Q5/6K1 w - - 0 1", moves: ["c2c8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 8, fen: "6k1/8/8/8/8/8/1Q6/6K1 w - - 0 1", moves: ["b2b8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 9, fen: "6k1/8/8/8/8/8/Q7/6K1 w - - 0 1", moves: ["a2a8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 10, fen: "6k1/8/8/8/8/8/5Q2/5K2 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 11, fen: "6k1/8/8/8/8/8/5Q2/4K3 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 12, fen: "6k1/8/8/8/8/8/4Q3/5K2 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 13, fen: "6k1/8/8/8/8/8/3Q4/5K2 w - - 0 1", moves: ["d2d8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 14, fen: "6k1/8/8/8/8/8/2Q5/5K2 w - - 0 1", moves: ["c2c8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 15, fen: "6k1/8/8/8/8/8/1Q6/5K2 w - - 0 1", moves: ["b2b8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 16, fen: "6k1/8/8/8/8/8/Q7/5K2 w - - 0 1", moves: ["a2a8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 17, fen: "6k1/8/8/8/8/8/5Q2/3K4 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 18, fen: "6k1/8/8/8/8/8/4Q3/3K4 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 19, fen: "6k1/8/8/8/8/8/3Q4/3K4 w - - 0 1", moves: ["d2d8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 20, fen: "6k1/8/8/8/8/8/2Q5/3K4 w - - 0 1", moves: ["c2c8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 21, fen: "6k1/8/8/8/8/8/1Q6/3K4 w - - 0 1", moves: ["b2b8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 22, fen: "6k1/8/8/8/8/8/Q7/3K4 w - - 0 1", moves: ["a2a8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 23, fen: "6k1/8/8/8/8/8/5Q2/2K5 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 24, fen: "6k1/8/8/8/8/8/4Q3/2K5 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 25, fen: "6k1/8/8/8/8/8/3Q4/2K5 w - - 0 1", moves: ["d2d8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 26, fen: "6k1/8/8/8/8/8/2Q5/2K5 w - - 0 1", moves: ["c2c8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 27, fen: "6k1/8/8/8/8/8/1Q6/2K5 w - - 0 1", moves: ["b2b8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 28, fen: "6k1/8/8/8/8/8/Q7/2K5 w - - 0 1", moves: ["a2a8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 29, fen: "6k1/8/8/8/8/8/5Q2/1K6 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 30, fen: "6k1/8/8/8/8/8/4Q3/1K6 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 31, fen: "6k1/8/8/8/8/8/3Q4/1K6 w - - 0 1", moves: ["d2d8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 32, fen: "6k1/8/8/8/8/8/2Q5/1K6 w - - 0 1", moves: ["c2c8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 33, fen: "6k1/8/8/8/8/8/1Q6/1K6 w - - 0 1", moves: ["b2b8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 34, fen: "6k1/8/8/8/8/8/Q7/1K6 w - - 0 1", moves: ["a2a8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 35, fen: "6k1/8/8/8/8/8/5Q2/K7 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 36, fen: "6k1/8/8/8/8/8/4Q3/K7 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 37, fen: "6k1/8/8/8/8/8/3Q4/K7 w - - 0 1", moves: ["d2d8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 38, fen: "6k1/8/8/8/8/8/2Q5/K7 w - - 0 1", moves: ["c2c8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 39, fen: "6k1/8/8/8/8/8/1Q6/K7 w - - 0 1", moves: ["b2b8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 40, fen: "6k1/8/8/8/8/8/Q7/K7 w - - 0 1", moves: ["a2a8"], goal: "mate-in-1", tags: ["classic","queen"] },
-
-  // Rook mates-in-1
-  { id: 41, fen: "6k1/8/8/8/8/8/8/5RK1 w - - 0 1", moves: ["f1f8"], goal: "mate-in-1", tags: ["rook","back-rank"] }, // Rf8#
-  { id: 42, fen: "6k1/8/8/8/8/8/8/4R1K1 w - - 0 1", moves: ["e1e8"], goal: "mate-in-1", tags: ["rook"] },
-  { id: 43, fen: "6k1/8/8/8/8/8/8/3R2K1 w - - 0 1", moves: ["d1d8"], goal: "mate-in-1", tags: ["rook"] },
-  { id: 44, fen: "6k1/8/8/8/8/8/8/2R3K1 w - - 0 1", moves: ["c1c8"], goal: "mate-in-1", tags: ["rook"] },
-  { id: 45, fen: "6k1/8/8/8/8/8/8/1R4K1 w - - 0 1", moves: ["b1b8"], goal: "mate-in-1", tags: ["rook"] },
-  { id: 46, fen: "6k1/8/8/8/8/8/8/R5K1 w - - 0 1", moves: ["a1a8"], goal: "mate-in-1", tags: ["rook"] },
-
-  // Bishop mates-in-1 (diagonals)
-  { id: 47, fen: "6k1/8/8/8/8/8/8/4B1K1 w - - 0 1", moves: ["e1h4"], goal: "mate-in-1", tags: ["bishop"] },
-  { id: 48, fen: "6k1/8/8/8/8/8/8/3B2K1 w - - 0 1", moves: ["d1h5"], goal: "mate-in-1", tags: ["bishop"] },
-  { id: 49, fen: "6k1/8/8/8/8/8/8/2B3K1 w - - 0 1", moves: ["c1h6"], goal: "mate-in-1", tags: ["bishop"] },
-  { id: 50, fen: "6k1/8/8/8/8/8/8/1B4K1 w - - 0 1", moves: ["b1a2"], goal: "mate-in-1", tags: ["bishop"] },
-
-  // Knight mates-in-1 (smothered corners)
-  { id: 51, fen: "7k/7p/8/8/8/8/6N1/6K1 w - - 0 1", moves: ["g2f7"], goal: "mate-in-1", tags: ["knight","smothered"] },
-  { id: 52, fen: "7k/7p/8/8/8/8/5N2/6K1 w - - 0 1", moves: ["f2g7"], goal: "mate-in-1", tags: ["knight"] },
-  { id: 53, fen: "7k/7p/8/8/8/8/4N3/6K1 w - - 0 1", moves: ["e2g6"], goal: "mate-in-1", tags: ["knight"] },
-  { id: 54, fen: "7k/7p/8/8/8/8/3N4/6K1 w - - 0 1", moves: ["d2f6"], goal: "mate-in-1", tags: ["knight"] },
-
-  // A few material-wins (tactics, forks, skewers) — no evolution
-  { id: 55, fen: "k7/8/8/8/3q4/8/6Q1/K7 w - - 0 1", moves: ["a1a2"], goal: "win-material", tags: ["skewer","queen"] }, // Ka2 winning the queen
-  { id: 56, fen: "k1r5/8/8/8/8/4N3/8/K7 w - - 0 1", moves: ["e3c2"], goal: "win-material", tags: ["fork","knight"] },
-  { id: 57, fen: "k7/8/8/4r3/8/8/3B4/K7 w - - 0 1", moves: ["d2e1"], goal: "win-material", tags: ["skewer","bishop"] },
-  { id: 58, fen: "2k5/8/8/8/8/8/8/K2R2R1 w - - 0 1", moves: ["g1g8", "c8b7", "d1d7"], goal: "mate-in-2", tags: ["back-rank","rook","ladder"] },
-  { id: 59, fen: "r1b1k2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1B1K2R w KQkq - 0 1", moves: ["f3g5"], goal: "win-material", tags: ["pin","queen"] },
-  { id: 60, fen: "6k1/5ppp/8/8/8/8/5QPP/6K1 w - - 0 1", moves: ["f2f7", "g8h7", "f7f8"], goal: "mate-in-2", tags: ["ladder","queen"] },
-
-  // -----------------------------
-  // SECTION B — Evolution is required before a move can be played (timing:"pre")
-  // The UCI move itself relies on the new movement ability after evolution.
-  // -----------------------------
-  // Knight -> Bishop to use diagonal
-  { id: 61, fen: "6k1/6p1/8/8/8/2N5/6K1/8 w - - 0 1", moves: ["c3g7"], evolutions: [{ ply: 1, square: "c3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","N->B","diagonal","mate"] }, // Bc3-g7# after evolving
-  { id: 62, fen: "6k1/8/8/8/8/6N1/6K1/8 w - - 0 1", moves: ["g3e5"], evolutions: [{ ply: 1, square: "g3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","N->B"] },
-  { id: 63, fen: "6k1/8/8/8/8/5N2/6K1/8 w - - 0 1", moves: ["f3b7"], evolutions: [{ ply: 1, square: "f3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","N->B"] },
-  { id: 64, fen: "6k1/8/8/8/8/4N3/6K1/8 w - - 0 1", moves: ["e3a7"], evolutions: [{ ply: 1, square: "e3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","N->B"] },
-
-  // Bishop -> Rook for a file blast
-  { id: 65, fen: "6k1/8/8/8/8/8/6K1/4B3 w - - 0 1", moves: ["e1e8"], evolutions: [{ ply: 1, square: "e1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","B->R","file"] },
-  { id: 66, fen: "6k1/8/8/8/8/8/6K1/3B4 w - - 0 1", moves: ["d1d8"], evolutions: [{ ply: 1, square: "d1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","B->R"] },
-  { id: 67, fen: "6k1/8/8/8/8/8/6K1/2B5 w - - 0 1", moves: ["c1c8"], evolutions: [{ ply: 1, square: "c1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","B->R"] },
-
-  // Rook -> Queen for a diagonal finisher
-  { id: 68, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1h4"], evolutions: [{ ply: 1, square: "e1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","R->Q","diagonal"] },
-  { id: 69, fen: "6k1/8/8/8/8/8/6K1/3R4 w - - 0 1", moves: ["d1h1"], evolutions: [{ ply: 1, square: "d1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","R->Q"] },
-  { id: 70, fen: "6k1/8/8/8/8/8/6K1/2R5 w - - 0 1", moves: ["c1a3"], evolutions: [{ ply: 1, square: "c1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","R->Q"] },
-
-  // Pawn -> Knight to jump a block (non-promotion evolution)
-  { id: 71, fen: "6k1/6p1/8/8/8/8/4P1K1/8 w - - 0 1", moves: ["e2g3"], evolutions: [{ ply: 1, square: "e2", from: "p", to: "n", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","P->N","leap"] },
-  { id: 72, fen: "6k1/6p1/8/8/8/8/3P2K1/8 w - - 0 1", moves: ["d2f3"], evolutions: [{ ply: 1, square: "d2", from: "p", to: "n", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","P->N"] },
-  { id: 73, fen: "6k1/8/8/8/8/8/2P3K1/8 w - - 0 1", moves: ["c2e3"], evolutions: [{ ply: 1, square: "c2", from: "p", to: "n", timing: "pre" }], goal: "evolve-and-mate", tags: ["evolution","P->N"] },
-
-  // Multi-ply with a single evolution on ply 1
-  { id: 74, fen: "6k1/6p1/8/8/8/8/4P1K1/8 w - - 0 1", moves: ["e2g3", "g8f8", "g3e4"], evolutions: [{ ply: 1, square: "e2", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["evolution","P->N","follow-up"] },
-
-  // -----------------------------
-  // SECTION C — Evolution happens after the move (timing:"post")
-  // Useful when the piece must first move to a key square, then evolve to deliver mate or win.
-  // -----------------------------
-  { id: 75, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1e7"], evolutions: [{ ply: 1, square: "e1", from: "r", to: "q", timing: "post" }], goal: "evolve-and-mate", tags: ["evolution","R->Q","post"] },
-  { id: 76, fen: "6k1/8/8/8/8/8/6K1/3B4 w - - 0 1", moves: ["d1h5"], evolutions: [{ ply: 1, square: "d1", from: "b", to: "r", timing: "post" }], goal: "evolve-and-mate", tags: ["evolution","B->R","post"] },
-  { id: 77, fen: "6k1/8/8/8/8/6P1/6K1/8 w - - 0 1", moves: ["g3g6"], evolutions: [{ ply: 1, square: "g3", from: "p", to: "n", timing: "post" }], goal: "win-material", tags: ["evolution","P->N","fork"] },
-  { id: 78, fen: "6k1/8/8/8/8/5N2/6K1/8 w - - 0 1", moves: ["f3f7"], evolutions: [{ ply: 1, square: "f3", from: "n", to: "b", timing: "post" }], goal: "evolve-and-mate", tags: ["evolution","N->B","post"] },
-
-  // -----------------------------
-  // SECTION D — Mate-in-2 with evolution on ply 2 (the reply makes the evolution critical)
-  // -----------------------------
-  { id: 79, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1e7", "g8f8", "e7a7"], evolutions: [{ ply: 3, square: "e7", from: "r", to: "q", timing: "pre" }], goal: "mate-in-2", tags: ["evolution","R->Q","conversion"] },
-  { id: 80, fen: "6k1/8/8/8/8/8/6K1/3B4 w - - 0 1", moves: ["d1b3", "g8g7", "b3d5"], evolutions: [{ ply: 3, square: "b3", from: "b", to: "r", timing: "pre" }], goal: "mate-in-2", tags: ["evolution","B->R"] },
-  { id: 81, fen: "6k1/8/8/8/8/8/4P1K1/8 w - - 0 1", moves: ["e2e4", "g8f8", "e4c5"], evolutions: [{ ply: 3, square: "e4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["evolution","P->N","leap"] },
-
-  // -----------------------------
-  // SECTION E — Themed packs (forks, skewers, discovered, deflection) using evolutions
-  // -----------------------------
-  // Pawn becomes knight to fork king and rook
-  { id: 82, fen: "6k1/6r1/8/8/8/8/4P1K1/8 w - - 0 1", moves: ["e2f4"], evolutions: [{ ply: 1, square: "e2", from: "p", to: "n", timing: "pre" }], goal: "win-material", tags: ["evolution","fork"] },
-  { id: 83, fen: "6k1/5r2/8/8/8/8/4P1K1/8 w - - 0 1", moves: ["e2d4"], evolutions: [{ ply: 1, square: "e2", from: "p", to: "n", timing: "pre" }], goal: "win-material", tags: ["evolution","fork"] },
-  // Knight becomes bishop to skewer along diagonal
-  { id: 84, fen: "6k1/5q2/8/8/8/2N5/6K1/8 w - - 0 1", moves: ["c3e2"], evolutions: [{ ply: 1, square: "c3", from: "n", to: "b", timing: "pre" }], goal: "win-material", tags: ["evolution","skewer"] },
-  { id: 85, fen: "r7/1k6/8/8/8/2N5/8/K7 w - - 0 1", moves: ["c3a2"], evolutions: [{ ply: 1, square: "c3", from: "n", to: "b", timing: "pre" }], goal: "win-material", tags: ["evolution","skewer"] },
-  // Bishop becomes rook to deflect and mate later
-  { id: 86, fen: "8/6k1/8/8/8/8/3R4/K3B3 w - - 0 1", moves: ["e1h4"], evolutions: [{ ply: 1, square: "e1", from: "b", to: "r", timing: "pre" }], goal: "win-material", tags: ["evolution","deflection"] },
-
-  // -----------------------------
-  // SECTION F — Bulk pack of short evolution mates (N->B, B->R, R->Q, P->N)
-  // Notes: compact positions so they’re easy to validate in your engine.
-  // -----------------------------
-  { id: 87, fen: "6k1/8/8/8/8/2N5/6K1/8 w - - 0 1", moves: ["c3h8"], evolutions: [{ ply: 1, square: "c3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["N->B"] },
-  { id: 88, fen: "6k1/8/8/8/8/2N5/6K1/8 w - - 0 1", moves: ["c3a5"], evolutions: [{ ply: 1, square: "c3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["N->B"] },
-  { id: 89, fen: "6k1/8/8/8/8/5N2/6K1/8 w - - 0 1", moves: ["f3a8"], evolutions: [{ ply: 1, square: "f3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["N->B"] },
-  { id: 90, fen: "6k1/8/8/8/8/5N2/6K1/8 w - - 0 1", moves: ["f3h4"], evolutions: [{ ply: 1, square: "f3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["N->B"] },
-  { id: 91, fen: "6k1/8/8/8/8/4N3/6K1/8 w - - 0 1", moves: ["e3c2"], evolutions: [{ ply: 1, square: "e3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["N->B"] },
-  { id: 92, fen: "6k1/8/8/8/8/4N3/6K1/8 w - - 0 1", moves: ["e3b6"], evolutions: [{ ply: 1, square: "e3", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["N->B"] },
-  { id: 93, fen: "6k1/8/8/8/8/8/6K1/4B3 w - - 0 1", moves: ["e1a5"], evolutions: [{ ply: 1, square: "e1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["B->R"] },
-  { id: 94, fen: "6k1/8/8/8/8/8/6K1/3B4 w - - 0 1", moves: ["d1a4"], evolutions: [{ ply: 1, square: "d1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["B->R"] },
-  { id: 95, fen: "6k1/8/8/8/8/8/6K1/2B5 w - - 0 1", moves: ["c1a3"], evolutions: [{ ply: 1, square: "c1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["B->R"] },
-  { id: 96, fen: "6k1/8/8/8/8/8/6K1/1B6 w - - 0 1", moves: ["b1a2"], evolutions: [{ ply: 1, square: "b1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["B->R"] },
-  { id: 97, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1g3"], evolutions: [{ ply: 1, square: "e1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q"] },
-  { id: 98, fen: "6k1/8/8/8/8/8/6K1/3R4 w - - 0 1", moves: ["d1f3"], evolutions: [{ ply: 1, square: "d1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q"] },
-  { id: 99, fen: "6k1/8/8/8/8/8/6K1/2R5 w - - 0 1", moves: ["c1e3"], evolutions: [{ ply: 1, square: "c1", from: "r", to: "q", timing: "post" }], goal: "evolve-and-mate", tags: ["R->Q","post"] },
-  { id: 100, fen: "6k1/8/8/8/8/8/6K1/1R6 w - - 0 1", moves: ["b1d3"], evolutions: [{ ply: 1, square: "b1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q"] },
-  { id: 101, fen: "6k1/6p1/8/8/8/8/4P1K1/8 w - - 0 1", moves: ["e2f4"], evolutions: [{ ply: 1, square: "e2", from: "p", to: "n", timing: "pre" }], goal: "win-material", tags: ["P->N","fork"] },
-  { id: 102, fen: "6k1/6p1/8/8/8/8/3P2K1/8 w - - 0 1", moves: ["d2e4"], evolutions: [{ ply: 1, square: "d2", from: "p", to: "n", timing: "pre" }], goal: "win-material", tags: ["P->N","fork"] },
-  { id: 103, fen: "6k1/8/8/8/8/8/2P3K1/8 w - - 0 1", moves: ["c2d4"], evolutions: [{ ply: 1, square: "c2", from: "p", to: "n", timing: "pre" }], goal: "win-material", tags: ["P->N","fork"] },
-  { id: 104, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1e7", "g8f8", "e7h7"], evolutions: [{ ply: 2, square: "e7", from: "r", to: "q", timing: "pre" }], goal: "mate-in-2", tags: ["R->Q"] },
-  { id: 105, fen: "6k1/8/8/8/8/8/6K1/3B4 w - - 0 1", moves: ["d1e2", "g8f8", "e2d3"], evolutions: [{ ply: 1, square: "d1", from: "b", to: "r", timing: "pre" }], goal: "mate-in-2", tags: ["B->R"] },
-  { id: 106, fen: "6k1/8/8/8/8/8/4P1K1/8 w - - 0 1", moves: ["e2e4", "g8f8", "e4d6"], evolutions: [{ ply: 2, square: "e4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N"] },
-  { id: 107, fen: "6k1/8/8/8/8/2N5/6K1/8 w - - 0 1", moves: ["c3d5", "g8f8", "d5f6"], evolutions: [{ ply: 1, square: "c3", from: "n", to: "b", timing: "pre" }], goal: "mate-in-2", tags: ["N->B"] },
-  { id: 108, fen: "6k1/8/8/8/8/5N2/6K1/8 w - - 0 1", moves: ["f3g5", "g8f8", "g5e6"], evolutions: [{ ply: 1, square: "f3", from: "n", to: "b", timing: "pre" }], goal: "mate-in-2", tags: ["N->B"] },
-  { id: 109, fen: "6k1/8/8/8/8/4N3/6K1/8 w - - 0 1", moves: ["e3d5", "g8f8", "d5f6"], evolutions: [{ ply: 1, square: "e3", from: "n", to: "b", timing: "pre" }], goal: "mate-in-2", tags: ["N->B"] },
-  { id: 110, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1g1"], evolutions: [{ ply: 1, square: "e1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q"] },
-  { id: 111, fen: "6k1/8/8/8/8/8/6K1/3R4 w - - 0 1", moves: ["d1d7"], evolutions: [{ ply: 1, square: "d1", from: "r", to: "q", timing: "post" }], goal: "win-material", tags: ["R->Q","post","pin"] },
-  { id: 112, fen: "6k1/8/8/8/8/8/6K1/2R5 w - - 0 1", moves: ["c1c5"], evolutions: [{ ply: 1, square: "c1", from: "r", to: "q", timing: "post" }], goal: "win-material", tags: ["R->Q","post","skewer"] },
-  { id: 113, fen: "6k1/8/8/8/8/8/6K1/1R6 w - - 0 1", moves: ["b1b5"], evolutions: [{ ply: 1, square: "b1", from: "r", to: "q", timing: "post" }], goal: "win-material", tags: ["R->Q","post"] },
-  { id: 114, fen: "6k1/8/8/8/8/8/6K1/R7 w - - 0 1", moves: ["a1a5"], evolutions: [{ ply: 1, square: "a1", from: "r", to: "q", timing: "post" }], goal: "win-material", tags: ["R->Q","post"] },
-  { id: 115, fen: "6k1/8/8/8/8/8/5P2/6K1 w - - 0 1", moves: ["f2f4", "g8g7", "f4h5"], evolutions: [{ ply: 2, square: "f4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N","leap"] },
-  { id: 116, fen: "6k1/8/8/8/8/8/4P3/6K1 w - - 0 1", moves: ["e2e4", "g8g7", "e4g5"], evolutions: [{ ply: 2, square: "e4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N"] },
-  { id: 117, fen: "6k1/8/8/8/8/8/3P4/6K1 w - - 0 1", moves: ["d2d4", "g8g7", "d4f5"], evolutions: [{ ply: 2, square: "d4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N"] },
-  { id: 118, fen: "6k1/8/8/8/8/8/2P5/6K1 w - - 0 1", moves: ["c2c4", "g8g7", "c4e5"], evolutions: [{ ply: 2, square: "c4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N"] },
-  { id: 119, fen: "6k1/8/8/8/8/8/1P6/6K1 w - - 0 1", moves: ["b2b4", "g8g7", "b4d5"], evolutions: [{ ply: 2, square: "b4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N"] },
-  { id: 120, fen: "6k1/8/8/8/8/8/P7/6K1 w - - 0 1", moves: ["a2a4", "g8g7", "a4c5"], evolutions: [{ ply: 2, square: "a4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N"] },
-
-  // -----------------------------
-  // SECTION G — Mixed classic + evolution mates to reach 150 total
-  // -----------------------------
-  { id: 121, fen: "r1b1k2r/1p1p1ppp/p1n1pn2/8/1P1NP3/2q1B3/P1P2PPP/R2QKB1R w KQkq - 0 1", moves: ["e3d2"], goal: "win-material", tags: ["classic","double-attack"] },
-  { id: 122, fen: "6k1/8/8/8/8/8/6Q1/6K1 w - - 0 1", moves: ["g2a8"], goal: "mate-in-1", tags: ["classic","queen","long-diagonal"] },
-  { id: 123, fen: "6k1/8/8/8/8/8/5Q2/6K1 w - - 0 1", moves: ["f2f7", "g8h7", "f7f8"], goal: "mate-in-2", tags: ["classic","ladder"] },
-  { id: 124, fen: "6k1/8/8/8/8/8/6Q1/6K1 w - - 0 1", moves: ["g2g7"], goal: "mate-in-1", tags: ["classic"] },
-  { id: 125, fen: "6k1/8/8/8/8/8/5R2/6K1 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["rook"] },
-  { id: 126, fen: "6k1/8/8/8/8/8/4R3/6K1 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["rook"] },
-  { id: 127, fen: "6k1/8/8/8/8/8/3R4/6K1 w - - 0 1", moves: ["d2d8"], goal: "mate-in-1", tags: ["rook"] },
-  { id: 128, fen: "6k1/8/8/8/8/8/2R5/6K1 w - - 0 1", moves: ["c2c8"], goal: "mate-in-1", tags: ["rook"] },
-  { id: 129, fen: "6k1/8/8/8/8/8/1R6/6K1 w - - 0 1", moves: ["b2b8"], goal: "mate-in-1", tags: ["rook"] },
-  { id: 130, fen: "6k1/8/8/8/8/8/R7/6K1 w - - 0 1", moves: ["a2a8"], goal: "mate-in-1", tags: ["rook"] },
-
-  // Evolution twists interleaved
-  { id: 131, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1e4", "g8f7", "e4h4"], evolutions: [{ ply: 2, square: "e4", from: "r", to: "q", timing: "pre" }], goal: "mate-in-2", tags: ["R->Q","conversion"] },
-  { id: 132, fen: "6k1/8/8/8/8/8/6K1/3B4 w - - 0 1", moves: ["d1a4", "g8h7", "a4a8"], evolutions: [{ ply: 2, square: "a4", from: "b", to: "r", timing: "pre" }], goal: "mate-in-2", tags: ["B->R"] },
-  { id: 133, fen: "6k1/8/8/8/8/8/5P2/6K1 w - - 0 1", moves: ["f2f4", "g8g7", "f4h5"], evolutions: [{ ply: 2, square: "f4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N"] },
-  { id: 134, fen: "6k1/8/8/8/8/2N5/6K1/8 w - - 0 1", moves: ["c3e4", "g8f7", "e4h7"], evolutions: [{ ply: 2, square: "e4", from: "n", to: "b", timing: "pre" }], goal: "mate-in-2", tags: ["N->B"] },
-  { id: 135, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1a1"], evolutions: [{ ply: 1, square: "e1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q","horizontal"] },
-  { id: 136, fen: "6k1/8/8/8/8/8/6K1/3R4 w - - 0 1", moves: ["d1d4"], evolutions: [{ ply: 1, square: "d1", from: "r", to: "q", timing: "post" }], goal: "win-material", tags: ["R->Q","post"] },
-  { id: 137, fen: "6k1/8/8/8/8/8/6K1/2R5 w - - 0 1", moves: ["c1h1"], evolutions: [{ ply: 1, square: "c1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q"] },
-  { id: 138, fen: "6k1/8/8/8/8/8/6K1/1B6 w - - 0 1", moves: ["b1b4"], evolutions: [{ ply: 1, square: "b1", from: "b", to: "r", timing: "post" }], goal: "win-material", tags: ["B->R","post"] },
-  { id: 139, fen: "6k1/8/8/8/8/8/6K1/1N6 w - - 0 1", moves: ["b1g2"], evolutions: [{ ply: 1, square: "b1", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["N->B"] },
-  { id: 140, fen: "6k1/8/8/8/8/8/6K1/P7 w - - 0 1", moves: ["a2a4", "g8g7", "a4c5"], evolutions: [{ ply: 2, square: "a4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N"] },
-
-  // Final 10 quick hitters mixing goals
-  { id: 141, fen: "6k1/8/8/8/8/8/6Q1/6K1 w - - 0 1", moves: ["g2g8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 142, fen: "6k1/8/8/8/8/8/5Q2/6K1 w - - 0 1", moves: ["f2a7"], goal: "mate-in-1", tags: ["classic","queen","diagonal"] },
-  { id: 143, fen: "6k1/8/8/8/8/8/4Q3/6K1 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 144, fen: "6k1/8/8/8/8/8/3Q4/6K1 w - - 0 1", moves: ["d2d8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 145, fen: "6k1/8/8/8/8/8/2Q5/6K1 w - - 0 1", moves: ["c2c8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 146, fen: "6k1/8/8/8/8/8/1Q6/6K1 w - - 0 1", moves: ["b2b8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 147, fen: "6k1/8/8/8/8/8/Q7/6K1 w - - 0 1", moves: ["a2a8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 148, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1e8"], evolutions: [{ ply: 1, square: "e1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q"] },
-  { id: 149, fen: "6k1/8/8/8/8/8/6K1/3B4 w - - 0 1", moves: ["d1d8"], evolutions: [{ ply: 1, square: "d1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["B->R"] },
-  { id: 150, fen: "6k1/8/8/8/8/8/5P2/6K1 w - - 0 1", moves: ["f2h3"], evolutions: [{ ply: 1, square: "f2", from: "p", to: "n", timing: "pre" }], goal: "evolve-and-mate", tags: ["P->N"] },
+  // --- Level 1-5: The Basics of Checkmate (Mate in 1) ---
+  {
+    id: 1,
+    title: "The Queen's Arrival",
+    fen: "6k1/8/8/8/8/8/5Q2/6K1 w - - 0 1",
+    moves: ["f2f8"],
+    goal: "mate-in-1",
+    tags: ["classic", "queen", "back-rank"],
+    narrative: "Your Queen sees an opening. Seize the opportunity to strike the final blow!",
+    hint: "The enemy king is trapped on the back rank. Can your queen deliver checkmate directly?",
+    lives: 3
+  },
+  {
+    id: 2,
+    title: "The Rook's Power",
+    fen: "6k1/8/8/8/8/8/8/R5K1 w - - 0 1",
+    moves: ["a1a8"],
+    goal: "mate-in-1",
+    tags: ["classic", "rook", "back-rank"],
+    narrative: "The enemy king is exposed. A straightforward assault with your Rook should end this.",
+    hint: "Sometimes the most direct path is the best one. Where can the rook go to checkmate?",
+    lives: 3
+  },
+  {
+    id: 3,
+    title: "The Knight's Leap",
+    fen: "7k/7p/8/8/8/8/6N1/6K1 w - - 0 1",
+    moves: ["g2f7"],
+    goal: "mate-in-1",
+    tags: ["classic", "knight", "smothered"],
+    narrative: "The king thinks he is safe behind his pawn, but your Knight knows a different path.",
+    hint: "The Knight's unique L-shaped move can attack squares that other pieces cannot.",
+    lives: 3
+  },
+  {
+    id: 4,
+    title: "The Bishop's Snipe",
+    fen: "6k1/8/8/8/8/8/8/1B4K1 w - - 0 1",
+    moves: ["b1a2"],
+    goal: "mate-in-1",
+    tags: ["classic", "bishop", "diagonal"],
+    narrative: "From across the board, your Bishop has a clear line of sight. End the battle.",
+    hint: "Look for the long diagonal that leads directly to the enemy king.",
+    lives: 3
+  },
+  {
+    id: 5,
+    title: "Two Rooks",
+    fen: "8/6k1/8/8/8/8/R7/R5K1 w - - 0 1",
+    moves: ["a7a8"],
+    goal: "mate-in-1",
+    tags: ["classic", "rook", "teamwork"],
+    narrative: "With two rooks working together, the enemy king has nowhere to run.",
+    hint: "One rook can cut off escape routes while the other delivers the final check.",
+    lives: 3
+  },
+  // --- Level 6-10: Mate in 2 ---
+  {
+    id: 6,
+    title: "The Ladder",
+    fen: "2k5/8/8/8/8/8/8/K2R2R1 w - - 0 1",
+    moves: ["g1g8", "c8b7", "d1d7"],
+    goal: "mate-in-2",
+    tags: ["classic", "rook", "ladder"],
+    narrative: "Force the king into a corner, then deliver the final blow. A classic tactic.",
+    hint: "Use one rook to force the king to move, then use the other to checkmate on the next turn.",
+    lives: 3
+  },
+  {
+    id: 7,
+    title: "Queen's Sacrifice",
+    fen: "1k6/1p6/8/8/8/8/6Q1/K7 w - - 0 1",
+    moves: ["g2b7", "b8b7", "a1b2"],
+    goal: "mate-in-2",
+    tags: ["classic", "queen", "sacrifice"],
+    narrative: "Sometimes, a great sacrifice is needed to achieve victory.",
+    hint: "Sacrifice your Queen to draw the king out, then use your king to win. Wait, that's not right. The book must be wrong. Find the real mate!",
+    lives: 3,
+    // Note: The hint is a red herring. The actual mate is different.
+    // The real solution is Qb7, then after Kxb7 it is stalemate. The student must find the *actual* mate-in-2.
+    // Let's fix this puzzle to be a real mate in 2.
+    // New setup:
+    fen: "6k1/8/5Q2/8/8/8/8/K7 w - - 0 1",
+    moves: ["f6e7", "g8h8", "e7f8"],
+    narrative: "Lure the king into the perfect position, then strike.",
+    hint: "Your first move should restrict the king's movement without giving check."
+  },
+  {
+    id: 8,
+    title: "Discovered Attack",
+    fen: "5k2/8/8/8/8/2N1R3/8/K7 w - - 0 1",
+    moves: ["c3d5", "f8f7", "e3f3"],
+    goal: "mate-in-2",
+    tags: ["classic", "knight", "discovered-attack"],
+    narrative: "Move one piece to unleash the power of another. A deadly combination.",
+    hint: "Move your Knight to a square that forces the king to move into the Rook's line of fire.",
+    lives: 3
+  },
+  {
+    id: 9,
+    title: "Pawn Promotion",
+    fen: "6k1/5P2/8/8/8/8/8/K7 w - - 0 1",
+    moves: ["f7f8q", "g8f8", "a1b2"],
+    goal: "mate-in-2",
+    tags: ["classic", "pawn", "promotion"],
+    narrative: "A lowly pawn reaches the end of its journey. What power will it become?",
+    hint: "Promote your pawn to a Queen to force a checkmate.",
+    lives: 3
+  },
+  {
+    id: 10,
+    title: "Smothered Mate",
+    fen: "6k1/8/6N1/8/8/8/8/K7 w - - 0 1",
+    moves: ["g6e7", "g8h8", "e7f8"],
+    goal: "mate-in-2",
+    tags: ["classic", "knight", "smothered"],
+    narrative: "The king is trapped by his own pieces. A cunning Knight can deliver the final blow.",
+    hint: "Use your Knight to force the king into the corner, then deliver a checkmate that he cannot escape from.",
+    lives: 3
+  },
+  // --- Level 11-15: Introduction to Evolution ---
+  {
+    id: 11,
+    title: "Pawn's First Leap",
+    fen: "rnbqkbnr/pppp1ppp/8/8/3pP3/8/PPP2PPP/RNBQKBNR w KQkq - 0 3",
+    moves: ["f1d3", "d4c3", "b1c3"],
+    goal: "evolve-and-mate",
+    tags: ["evolution", "P->N"],
+    narrative: "Your pawn captures a piece and feels a surge of power, transforming into a Knight! Use its new abilities.",
+    hint: "After capturing the pawn on c3, your pawn evolves. Use the new Knight to control the center.",
+    lives: 2
+  },
+  {
+    id: 12,
+    title: "Knight to Bishop",
+    fen: "r1bqkbnr/pp1ppppp/2n5/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+    moves: ["f1b5", "c6d4", "f3d4"],
+    goal: "evolve-and-mate",
+    tags: ["evolution", "N->B"],
+    narrative: "Your Knight captures the enemy, evolving into a Bishop. A new path to victory opens up.",
+    hint: "After your Knight captures on d4, it becomes a Bishop. Notice how it now controls a different set of squares.",
+    lives: 2
+  },
+  {
+    id: 13,
+    title: "Bishop to Rook",
+    fen: "rnbqkbnr/pp2pppp/3p4/8/3pP3/5N2/PPP2PPP/RNBQKB1R w KQkq - 0 4",
+    moves: ["f3d4", "g8f6", "f1d3"],
+    goal: "win-material",
+    tags: ["evolution", "B->R"],
+    narrative: "A simple capture transforms your Bishop into a mighty Rook. Control the open files!",
+    hint: "This puzzle requires you to make a capture that evolves your bishop. Use the new Rook to dominate the board.",
+    lives: 2
+  },
+  {
+    id: 14,
+    title: "Rook to Queen",
+    fen: "rnbqk2r/ppppbppp/5n2/4p3/2B1P3/3P1N2/PPP2PPP/RNBQK2R w KQkq - 1 5",
+    moves: ["c4f7", "e8f7", "f3e5"],
+    goal: "win-material",
+    tags: ["evolution", "R->Q"],
+    narrative: "Your Rook makes a key capture and ascends to become a Queen, the most powerful piece on the board.",
+    hint: "Sacrifice your Bishop to expose the king, then bring your Rook in for a capture and evolution.",
+    lives: 2
+  },
+  {
+    id: 15,
+    title: "Chain Evolution",
+    fen: "8/k7/8/8/8/8/p1K5/8 b - - 0 1",
+    moves: ["a2a1n", "c2b2", "a1c2"],
+    goal: "evolve-and-mate",
+    tags: ["evolution", "P->N", "N->B"],
+    narrative: "This requires multiple evolutions to succeed. Plan your moves carefully.",
+    hint: "First, promote your pawn to a Knight to check the king. Then, use the Knight to capture and evolve again.",
+    lives: 1
+  },
+  // --- Level 16-20: Advanced Tactics ---
+  {
+    id: 16,
+    title: "The Windmill",
+    fen: "6k1/5p1p/6p1/8/8/6r1/P4R2/K7 w - - 0 1",
+    moves: ["f2f7", "g8f7", "a2a4"],
+    goal: "win-material",
+    tags: ["advanced", "rook", "windmill"],
+    narrative: "Use a series of checks to pick off the enemy's defenses one by one.",
+    hint: "A 'windmill' tactic involves a repeating pattern of check and capture.",
+    lives: 2
+  },
+  {
+    id: 17,
+    title: "Deflection",
+    fen: "6k1/5p2/6p1/7p/7P/8/5q2/K7 w - - 0 1",
+    moves: ["a1b1", "f2f1", "b1c2"],
+    goal: "win-material",
+    tags: ["advanced", "queen", "deflection"],
+    narrative: "Lure the enemy Queen away from her defensive duties to win material.",
+    hint: "Force the queen to move, leaving a valuable piece undefended.",
+    lives: 2
+  },
+  {
+    id: 18,
+    title: "Overloading",
+    fen: "6k1/5p2/6p1/7p/7P/8/5q2/K7 w - - 0 1",
+    moves: ["a1b1", "f2h4", "b1c2"],
+    goal: "win-material",
+    tags: ["advanced", "queen", "overloading"],
+    narrative: "One piece can't do two jobs at once. Find the overloaded defender and exploit it.",
+    hint: "Identify a piece that is defending two other pieces, then attack one of them.",
+    lives: 2
+  },
+  {
+    id: 19,
+    title: "Clearance Sacrifice",
+    fen: "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2N2N2/PPPP1PPP/R1BQK2R w KQkq - 4 5",
+    moves: ["f3e5", "c6e5", "d2d4"],
+    goal: "win-material",
+    tags: ["advanced", "sacrifice", "clearance"],
+    narrative: "Sacrifice a piece to clear a path for a more powerful attack.",
+    hint: "Give up your Knight to open up a line for your pawn to attack the Bishop.",
+    lives: 2
+  },
+  {
+    id: 20,
+    title: "Zugzwang",
+    fen: "8/8/8/8/8/p1k5/P1K5/8 w - - 0 1",
+    moves: ["c2b1", "c3b4", "b1c2"],
+    goal: "win-material",
+    tags: ["advanced", "king", "zugzwang"],
+    narrative: "Force your opponent into a position where any move they make will worsen their situation.",
+    hint: "Triangulate with your king to put the opponent in Zugzwang, forcing them to give up the pawn.",
+    lives: 1
+  },
+  // --- Level 21-25: Evolution Mastery ---
+  {
+    id: 21,
+    title: "Knight's Path to Victory",
+    fen: "8/8/8/8/4k3/8/3p4/3K4 b - - 0 1",
+    moves: ["d2d1n", "d1c3", "e4d3"],
+    goal: "evolve-and-mate",
+    tags: ["evolution", "mastery", "P->N"],
+    narrative: "Only by evolving into a Knight can this pawn secure the win. A true test of foresight.",
+    hint: "Underpromoting to a Knight is the only way to win this endgame.",
+    lives: 1
+  },
+  {
+    id: 22,
+    title: "The Evolved Fork",
+    fen: "rnb1kbnr/pppp1ppp/8/4p3/6Pq/8/PPPPPP1P/RNBQKBNR w KQkq - 0 3",
+    moves: ["f1h3", "h4g4", "h3g4"],
+    goal: "evolve-and-mate",
+    tags: ["evolution", "mastery", "B->R"],
+    narrative: "Evolve your Bishop into a Rook to create a devastating fork.",
+    hint: "After capturing on g4, your new Rook will be able to attack two pieces at once.",
+    lives: 1
+  },
+  {
+    id: 23,
+    title: "The Long Road",
+    fen: "8/8/8/8/8/k7/p7/K7 b - - 0 1",
+    moves: ["a2a1n", "a1c2", "b2c2"],
+    goal: "evolve-and-mate",
+    tags: ["evolution", "mastery", "P->N", "N->B"],
+    narrative: "This puzzle requires a promotion and then another evolution to checkmate the cornered king.",
+    hint: "Promote to a Knight, then use it to capture and evolve into a Bishop for the final move.",
+    lives: 1
+  },
+  {
+    id: 24,
+    title: "Positional Evolution",
+    fen: "r3k2r/ppp1qppp/2np1n2/2b1p1B1/2B1P1b1/2NP1N2/PPP2PPP/R2Q1RK1 w kq - 2 8",
+    moves: ["c3d5", "g4f3", "g5f6"],
+    goal: "win-material",
+    tags: ["evolution", "mastery", "N->B"],
+    narrative: "Sometimes, evolving a piece is not for an immediate attack, but to improve your position for the long game.",
+    hint: "Evolve your Knight into a Bishop to put pressure on the queen and control key diagonals.",
+    lives: 2
+  },
+  {
+    id: 25,
+    title: "The Final Transformation",
+    fen: "r1b1k2r/pppq1ppp/2np1n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQ1RK1 w kq - 1 7",
+    moves: ["c4f7", "e8f7", "f3g5"],
+    goal: "win-material",
+    tags: ["evolution", "mastery", "B->R", "R->Q"],
+    narrative: "Evolve a Bishop to a Rook, then the Rook to a Queen to completely dominate the board.",
+    hint: "This multi-step evolution will leave you with a decisive material advantage.",
+    lives: 1
+  },
+  // --- Level 26-30: Grandmaster Challenges ---
+  {
+    id: 26,
+    title: "The Immortal Game",
+    fen: "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2",
+    moves: ["f2f4", "e5f4", "f1c4"],
+    goal: "win-material",
+    tags: ["grandmaster", "classic", "sacrifice"],
+    narrative: "A famous sequence from one of the most celebrated games in chess history. Can you find the path to victory?",
+    hint: "This is the King's Gambit. It involves sacrificing a pawn for rapid development.",
+    lives: 2
+  },
+  {
+    id: 27,
+    title: "Kasparov's Octopus",
+    fen: "r2q1rk1/p2b1pbp/1pn1pnp1/2pp4/2PP4/1PN1PNP1/PB3PBP/R2Q1RK1 w - - 0 12",
+    moves: ["d1e2", "c5d4", "e3d4"],
+    goal: "win-material",
+    tags: ["grandmaster", "kasparov", "knight"],
+    narrative: "Garry Kasparov was known for his powerful Knights. Emulate his style to dominate the center.",
+    hint: "A strong Knight on d5, supported by other pieces, can be a winning advantage.",
+    lives: 2
+  },
+  {
+    id: 28,
+    title: "Fischer's Fury",
+    fen: "r1bq1rk1/pp1n1pbp/2p1p1p1/3n4/3P4/2N1PNP1/PP3PBP/R1BQ1RK1 w - - 1 10",
+    moves: ["e3e4", "d5c3", "b2c3"],
+    goal: "win-material",
+    tags: ["grandmaster", "fischer", "pawn-structure"],
+    narrative: "Bobby Fischer was a master of pawn structures. Create a powerful pawn center to control the game.",
+    hint: "Challenge the opponent's control of the center with your own pawns.",
+    lives: 2
+  },
+  {
+    id: 29,
+    title: "The Evolutionary Endgame",
+    fen: "8/8/8/4k3/8/8/1p1K4/8 b - - 0 1",
+    moves: ["b2b1n", "d2c3", "b1d2"],
+    goal: "evolve-and-mate",
+    tags: ["grandmaster", "evolution", "endgame"],
+    narrative: "In this difficult endgame, only a very specific evolution can secure the win. A true test of a grandmaster.",
+    hint: "Promoting to a Queen would result in a stalemate. You must underpromote to a Knight.",
+    lives: 1
+  },
+  {
+    id: 30,
+    title: "The Final Test",
+    fen: "3r1k2/p4p2/1p2p3/2p5/2P5/1P2P3/P4PPP/3R2K1 w - - 0 1",
+    moves: ["d1d8", "f8e7", "d8a8"],
+    goal: "win-material",
+    tags: ["grandmaster", "rook", "endgame"],
+    narrative: "You have reached the final challenge. Use your knowledge of tactics and evolution to win this complex Rook endgame.",
+    hint: "Activate your Rook and create threats that your opponent cannot defend against.",
+    lives: 1
+  }
 ];
-
-// Implementation hint:
-// In your validator, enforce the evolution chain by tracking a piece's role across plies.
-// Example: if a piece is "B" and tries to evolve to "Q", reject (must be B->R first, then R->Q on a later ply).
-// This pack never skips the chain, but the extra check makes your engine robust.
