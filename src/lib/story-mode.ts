@@ -7,8 +7,8 @@
 //  - evolutions (optional): one or more transformations that occur at a specific ply.
 //      * ply: 1-based index into the moves array (1 is the first move in `moves`).
 //      * square: the origin square of the piece that evolves on that ply (in UCI, before the move is made).
-//      * from: current role of the evolving piece ("P" | "N" | "B" | "R").
-//      * to: next role after evolution ("N" | "B" | "R" | "Q").
+//      * from: current role of the evolving piece ("p" | "n" | "b" | "r").
+//      * to: next role after evolution ("n" | "b" | "r" | "q").
 //      * timing: "pre" | "post" — whether evolution happens before or after the ply's UCI move is applied.
 //        (Most puzzles use "pre" if the evolution is needed to make the move legal.)
 //  - goal: short descriptor of the task ("mate-in-1", "mate-in-2", "mate-in-3", "win-material", "evolve-and-mate").
@@ -222,7 +222,7 @@ export const puzzles: Puzzle[] = [
   // -----------------------------
   { id: 121, fen: "r1b1k2r/1p1p1ppp/p1n1pn2/8/1P1NP3/2q1B3/P1P2PPP/R2QKB1R w KQkq - 0 1", moves: ["e3d2"], goal: "win-material", tags: ["classic","double-attack"] },
   { id: 122, fen: "6k1/8/8/8/8/8/6Q1/6K1 w - - 0 1", moves: ["g2a8"], goal: "mate-in-1", tags: ["classic","queen","long-diagonal"] },
-  { id: 123, fen: "6k1/8/8/8/8/8/5Q2/6K1 w - - 0 1", moves: ["f2f7", "g8h8", "f7f8"], goal: "mate-in-2", tags: ["classic","ladder"] },
+  { id: 123, fen: "6k1/8/8/8/8/8/5Q2/6K1 w - - 0 1", moves: ["f2f7", "g8h7", "f7f8"], goal: "mate-in-2", tags: ["classic","ladder"] },
   { id: 124, fen: "6k1/8/8/8/8/8/6Q1/6K1 w - - 0 1", moves: ["g2g7"], goal: "mate-in-1", tags: ["classic"] },
   { id: 125, fen: "6k1/8/8/8/8/8/5R2/6K1 w - - 0 1", moves: ["f2f8"], goal: "mate-in-1", tags: ["rook"] },
   { id: 126, fen: "6k1/8/8/8/8/8/4R3/6K1 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["rook"] },
@@ -240,18 +240,23 @@ export const puzzles: Puzzle[] = [
   { id: 136, fen: "6k1/8/8/8/8/8/6K1/3R4 w - - 0 1", moves: ["d1d4"], evolutions: [{ ply: 1, square: "d1", from: "r", to: "q", timing: "post" }], goal: "win-material", tags: ["R->Q","post"] },
   { id: 137, fen: "6k1/8/8/8/8/8/6K1/2R5 w - - 0 1", moves: ["c1h1"], evolutions: [{ ply: 1, square: "c1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q"] },
   { id: 138, fen: "6k1/8/8/8/8/8/6K1/1B6 w - - 0 1", moves: ["b1b4"], evolutions: [{ ply: 1, square: "b1", from: "b", to: "r", timing: "post" }], goal: "win-material", tags: ["B->R","post"] },
-  { id: 139, fen: "6k1/8/8/8/8/8/6K1/1N6 w - - 0 1", moves: ["b1d2"], evolutions: [{ ply: 1, square: "b1", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["N->B"] },
+  { id: 139, fen: "6k1/8/8/8/8/8/6K1/1N6 w - - 0 1", moves: ["b1g2"], evolutions: [{ ply: 1, square: "b1", from: "n", to: "b", timing: "pre" }], goal: "evolve-and-mate", tags: ["N->B"] },
   { id: 140, fen: "6k1/8/8/8/8/8/6K1/P7 w - - 0 1", moves: ["a2a4", "g8g7", "a4c5"], evolutions: [{ ply: 2, square: "a4", from: "p", to: "n", timing: "pre" }], goal: "mate-in-2", tags: ["P->N"] },
 
   // Final 10 quick hitters mixing goals
-  { id: 141, fen: "6k1/8/8/8/8/8/6Q1/6K1 w - - 0 1", moves: ["g2g7"], goal: "mate-in-1", tags: ["classic","queen"] },
+  { id: 141, fen: "6k1/8/8/8/8/8/6Q1/6K1 w - - 0 1", moves: ["g2g8"], goal: "mate-in-1", tags: ["classic","queen"] },
   { id: 142, fen: "6k1/8/8/8/8/8/5Q2/6K1 w - - 0 1", moves: ["f2a7"], goal: "mate-in-1", tags: ["classic","queen","diagonal"] },
   { id: 143, fen: "6k1/8/8/8/8/8/4Q3/6K1 w - - 0 1", moves: ["e2e8"], goal: "mate-in-1", tags: ["classic","queen"] },
   { id: 144, fen: "6k1/8/8/8/8/8/3Q4/6K1 w - - 0 1", moves: ["d2d8"], goal: "mate-in-1", tags: ["classic","queen"] },
   { id: 145, fen: "6k1/8/8/8/8/8/2Q5/6K1 w - - 0 1", moves: ["c2c8"], goal: "mate-in-1", tags: ["classic","queen"] },
   { id: 146, fen: "6k1/8/8/8/8/8/1Q6/6K1 w - - 0 1", moves: ["b2b8"], goal: "mate-in-1", tags: ["classic","queen"] },
   { id: 147, fen: "6k1/8/8/8/8/8/Q7/6K1 w - - 0 1", moves: ["a2a8"], goal: "mate-in-1", tags: ["classic","queen"] },
-  { id: 148, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1a1"], evolutions: [{ ply: 1, square: "e1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q"] },
-  { id: 149, fen: "6k1/8/8/8/8/8/6K1/3B4 w - - 0 1", moves: ["d1h5"], evolutions: [{ ply: 1, square: "d1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["B->R"] },
+  { id: 148, fen: "6k1/8/8/8/8/8/6K1/4R3 w - - 0 1", moves: ["e1e8"], evolutions: [{ ply: 1, square: "e1", from: "r", to: "q", timing: "pre" }], goal: "evolve-and-mate", tags: ["R->Q"] },
+  { id: 149, fen: "6k1/8/8/8/8/8/6K1/3B4 w - - 0 1", moves: ["d1d8"], evolutions: [{ ply: 1, square: "d1", from: "b", to: "r", timing: "pre" }], goal: "evolve-and-mate", tags: ["B->R"] },
   { id: 150, fen: "6k1/8/8/8/8/8/5P2/6K1 w - - 0 1", moves: ["f2h3"], evolutions: [{ ply: 1, square: "f2", from: "p", to: "n", timing: "pre" }], goal: "evolve-and-mate", tags: ["P->N"] },
 ];
+
+// Implementation hint:
+// In your validator, enforce the evolution chain by tracking a piece's role across plies.
+// Example: if a piece is "B" and tries to evolve to "Q", reject (must be B->R first, then R->Q on a later ply).
+// This pack never skips the chain, but the extra check makes your engine robust.
